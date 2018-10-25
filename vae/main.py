@@ -21,6 +21,8 @@ parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
 parser.add_argument('--model', type=str, default='', metavar='M',
                     help='path to already-trained model')
+parser.add_argument('--optimizer', type=str, default='', metavar='O',
+                    help='path to already-training optimizer')
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -69,13 +71,12 @@ class VAE(nn.Module):
         return self.decode(z), mu, logvar
 
 
-if args.model:
-    model = VAE()
-    model.load_state_dict(torch.load(args.model))
-    model = model.to(device)
-else:
-    model = VAE().to(device)
+model = VAE().to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
+if args.model:
+    model.load_state_dict(torch.load(args.model))
+if args.optimizer:
+    optimizer.load_state_dict(torch.load(args.optimizer))
 
 
 # Reconstruction + KL divergence losses summed over all elements and batch
@@ -138,4 +139,5 @@ if __name__ == "__main__":
             sample = model.decode(sample).cpu()
             save_image(sample.view(64, 1, dimesions[0], dimesions[1]),
                        'results/sample_' + str(epoch) + '.png')
-        torch.save(model.state_dict(), 'trained_model/epoch_' + str(epoch))
+        torch.save(model.state_dict(), 'trained_model/epoch_' + str(epoch) + '_model')
+        torch.save(optimizer.state_dict(), 'trained_model/epoch_' + str(epoch) + '_optimizer')
