@@ -19,6 +19,8 @@ parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
 parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
+parser.add_argument('--model', type=str, default='', metavar='M',
+                    help='path to already-trained model')
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -66,7 +68,12 @@ class VAE(nn.Module):
         return self.decode(z), mu, logvar
 
 
-model = VAE().to(device)
+if args.model:
+    model = VAE()
+    model.load_state_dict(torch.load(args.model))
+    model = model.to(device)
+else:
+    model = VAE().to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
 
@@ -141,3 +148,4 @@ if __name__ == "__main__":
             sample = model.decode(sample).cpu()
             save_image(sample.view(64, 1, dimesions[0], dimesions[1]),
                        'results/sample_' + str(epoch) + '.png')
+        torch.save(model.state_dict(), 'trained_model/epoch_' + str(epoch))
