@@ -91,23 +91,23 @@ def loss_function(recon_x, x, mu, logvar):
 
 
 def train(epoch):
-    print('ok start train', epoch)
+    #print('ok start train', epoch)
     model.train()
     train_loss = 0
     for batch_idx, (data, _) in enumerate(train_loader):
-        print('ok train data', batch_idx)
+        #print('ok train data', batch_idx)
         data = data.to(device)
-        print('optimizer zero grad')
+        #print('optimizer zero grad')
         optimizer.zero_grad()
-        print('recon model data')
+        #print('recon model data')
         recon_batch, mu, logvar = model(data)
-        print('get loss')
+        #print('get loss')
         loss = loss_function(recon_batch, data, mu, logvar)
-        print('loss backword')
+        #print('loss backword')
         loss.backward()
-        print('increment loss')
+        #print('increment loss')
         train_loss += loss.item()
-        print('optimizer step')
+        #print('optimizer step')
         optimizer.step()
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -120,7 +120,7 @@ def train(epoch):
 
 
 def test(epoch):
-    print('ok start test', epoch)
+    #print('ok start test', epoch)
     model.eval()
     test_loss = 0
     with torch.no_grad():
@@ -140,7 +140,7 @@ def test(epoch):
 
 if __name__ == "__main__":
     for epoch in range(1, args.epochs + 1):
-        print('ok start epoch', epoch)
+        #print('ok start epoch', epoch)
         train(epoch)
         test(epoch)
         with torch.no_grad():
