@@ -1,2 +1,5 @@
-vae/imgs/**
+vae/imgs
 vae/results/**
+vae/trained_model/**
+!vae/results/.gitkeep
+!vae/trained_model/.gitkeep

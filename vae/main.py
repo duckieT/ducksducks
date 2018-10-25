@@ -9,8 +9,8 @@ from torchvision.utils import save_image
 
 
 parser = argparse.ArgumentParser(description='VAE Test, Duckietown')
-parser.add_argument('--batch-size', type=int, default=128, metavar='N',
-                    help='input batch size for training (default: 128)')
+parser.add_argument('--batch-size', type=int, default=10, metavar='N',
+                    help='input batch size for training (default: 10)')
 parser.add_argument('--epochs', type=int, default=10, metavar='N',
                     help='number of epochs to train (default: 10)')
 parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -28,7 +28,8 @@ torch.manual_seed(args.seed)
 
 device = torch.device("cuda" if args.cuda else "cpu")
 
-dimesions = (640, 480)
+dimesions = (480, 640)
+latent_space_dims = 40
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 train_loader = torch.utils.data.DataLoader(
@@ -44,9 +45,9 @@ class VAE(nn.Module):
         super(VAE, self).__init__()
 
         self.fc1 = nn.Linear(dimesions[0] * dimesions[1], 1000)
-        self.fc21 = nn.Linear(1000, 40)
-        self.fc22 = nn.Linear(1000, 40)
-        self.fc3 = nn.Linear(40, 1000)
+        self.fc21 = nn.Linear(1000, latent_space_dims)
+        self.fc22 = nn.Linear(1000, latent_space_dims)
+        self.fc3 = nn.Linear(latent_space_dims, 1000)
         self.fc4 = nn.Linear(1000, dimesions[0] * dimesions[1])
 
     def encode(self, x):
@@ -91,23 +92,15 @@ def loss_function(recon_x, x, mu, logvar):
 
 
 def train(epoch):
-    #print('ok start train', epoch)
     model.train()
     train_loss = 0
     for batch_idx, (data, _) in enumerate(train_loader):
-        #print('ok train data', batch_idx)
         data = data.to(device)
-        #print('optimizer zero grad')
         optimizer.zero_grad()
-        #print('recon model data')
         recon_batch, mu, logvar = model(data)
-        #print('get loss')
         loss = loss_function(recon_batch, data, mu, logvar)
-        #print('loss backword')
         loss.backward()
-        #print('increment loss')
         train_loss += loss.item()
-        #print('optimizer step')
         optimizer.step()
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -120,7 +113,6 @@ def train(epoch):
 
 
 def test(epoch):
-    #print('ok start test', epoch)
     model.eval()
     test_loss = 0
     with torch.no_grad():
@@ -130,8 +122,7 @@ def test(epoch):
             test_loss += loss_function(recon_batch, data, mu, logvar).item()
             if i == 0:
                 n = min(data.size(0), 8)
-                comparison = torch.cat([data[:n],
-                                      recon_batch.view(args.batch_size, 1, dimesions[0], dimesions[1])[:n]])
+                comparison = torch.cat([data[:n], recon_batch.view(args.batch_size, 3, dimesions[0], dimesions[1])[:n]])
                 save_image(comparison.cpu(),
                          'results/reconstruction_' + str(epoch) + '.png', nrow=n)
 
@@ -140,11 +131,10 @@ def test(epoch):
 
 if __name__ == "__main__":
     for epoch in range(1, args.epochs + 1):
-        #print('ok start epoch', epoch)
         train(epoch)
         test(epoch)
         with torch.no_grad():
-            sample = torch.randn(64, 20).to(device)
+            sample = torch.randn(64, latent_space_dims).to(device)
             sample = model.decode(sample).cpu()
             save_image(sample.view(64, 1, dimesions[0], dimesions[1]),
                        'results/sample_' + str(epoch) + '.png')
