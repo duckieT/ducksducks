@@ -20,6 +20,9 @@ test_sampling_n = 8
 
 
 def params ():
+	global feature_space_size
+	global latent_space_size
+
 	import argparse
 	import os
 	import sys
@@ -29,11 +32,14 @@ def params ():
 	parser .add_argument ('--test', type = str, default = '', metavar = 'path', help = 'path to a folder containing test images for the vae (default: training dataset)')
 	parser .add_argument ('--init', type = str, default = '', metavar = 'path', help = 'path to a trained model file for initializing training')
 
-	parser .add_argument ('--batch-size', type = int, default = 10, metavar = 'n', help = 'batch size for training	(default: 10)')
-	parser .add_argument ('--epochs', type = int, default = 10, metavar = 'n', help = 'number of epochs to train  (default: 10)')
+	parser .add_argument ('--feature-size', type = int, default = feature_space_size, metavar = 'n', help = 'number of feature dimonsions (default: ' + str (feature_space_size) + ')')
+	parser .add_argument ('--latent-size', type = int, default = latent_space_size, metavar = 'n', help = 'number of latent space dimensions (default: ' + str (latent_space_size) + ')')
+	
+	parser .add_argument ('--batch-size', type = int, default = 10, metavar = 'n', help = 'batch size for training (default: 10)')
+	parser .add_argument ('--epochs', type = int, default = 10, metavar = 'n', help = 'number of epochs to train (default: 10)')
 
 	parser .add_argument ('--log-interval', type = int, default = 10, metavar = 's', help = 'how many batches to wait before logging training status')
-	parser .add_argument ('--seed', type = int, default = 1, metavar = 's', help = 'random seed  (default: 1)')
+	parser .add_argument ('--seed', type = int, default = 1, metavar = 's', help = 'random seed (default: 1)')
 	parser .add_argument ('--no-cuda', action = 'store_true', default = False, help = 'disables CUDA training')
 
 	parser .add_argument ('--out', type = str, required = True, metavar = 'path', help = 'path to a folder to store output')
@@ -41,6 +47,9 @@ def params ():
 	args = parser .parse_args ()
 	args .cuda = not args .no_cuda and torch .cuda .is_available ()
 	args .test = args .test or args .data
+
+	feature_space_size = args .feature_size
+	latent_space_size = args .latent_size
 
 	os .makedirs (args .out, exist_ok = True)
 	if os .listdir (args .out):
