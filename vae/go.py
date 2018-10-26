@@ -7,6 +7,7 @@ from torch .nn import functional as F
 from torchvision .utils import save_image
 
 
+# hyperparameters
 input_image_size = (480, 640)
 input_image_channels = 3
 feature_space_size = 1000
@@ -14,6 +15,7 @@ latent_space_size = 40
 
 learning_rate = 1e-3
 
+# test hyperparameters
 test_sampling_n = 8
 
 
@@ -31,6 +33,8 @@ def params ():
 	parser .add_argument ('--log-interval', type = int, default = 10, metavar = 's', help = 'how many batches to wait before logging training status')
 	parser .add_argument ('--seed', type = int, default = 1, metavar = 's', help = 'random seed  (default: 1)')
 	parser .add_argument ('--no-cuda', action = 'store_true', default = False, help = 'disables CUDA training')
+
+	parser .add_argument ('--out', type = str, required = True, metavar = 'path', help = 'path to a folder to store output')
 
 	args = parser .parse_args ()
 	args .cuda = not args .no_cuda and torch .cuda .is_available ()
@@ -54,6 +58,11 @@ def load_data (path, cuda = True):
 		batch_size = args .batch_size,
 		shuffle = True,
 		**cuda_args)
+
+def out_file (filename):
+	import os
+        os .makedirs (args .out, exist_ok=True)
+	return os .path .join (image_folder_path, filename)
 
 class VAE (nn .Module):
 	def __init__ (self):
@@ -132,7 +141,7 @@ def test (epoch):
 						data [:n],
 						recon_batch .view (args .batch_size, input_image_channels, input_image_size [0], input_image_size [1]) [:n] ])
 				save_image (comparison .cpu (),
-						 'results/reconstruction_' + str (epoch) + '.png', nrow = n)
+						 out_file ('reconstruction_' + str (epoch) + '.png'), nrow = n)
 
 	test_loss = total_test_loss / len (test_loader .dataset)
 	print ('====> Test set loss: {:.4f}' .format (test_loss))
@@ -166,10 +175,10 @@ for epoch in range (epoch_offset, epoch_offset + args .epochs):
 		sample = torch .randn (test_sampling_n ** 2, latent_space_size) .to (device)
 		sample = model .decode (sample) .cpu ()
 		save_image (sample .view (test_sampling_n ** 2, 1, input_image_size [0], input_image_size [1]),
-				'results/sample_' + str (epoch) + '.png')
+				out_file ('sample_' + str (epoch) + '.png'))
 
 		state = {
 			'epoch': epoch,
 			'model': model .state_dict (),
 			'optimizer': optimizer .state_dict () }
-		torch .save (state, 'results/state_' + str (epoch) + '.pt')
+		torch .save (state, out_file ('state_' + str (epoch) + '.pt'))
