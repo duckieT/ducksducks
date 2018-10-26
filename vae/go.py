@@ -21,6 +21,8 @@ test_sampling_n = 8
 
 def params ():
 	import argparse
+	import os
+	import sys
 	parser = argparse .ArgumentParser (description = 'vae x ducks')
 	
 	parser .add_argument ('--data', type = str, required = True, metavar = 'path', help = 'path to a folder containing training images for the vae')
@@ -39,6 +41,10 @@ def params ():
 	args = parser .parse_args ()
 	args .cuda = not args .no_cuda and torch .cuda .is_available ()
 	args .test = args .test or args .data
+
+	os .makedirs (args .out, exist_ok = True)
+	if os .listdir (args .out):
+		print ('Warning: ' + args .out + ' is not empty!', file = sys .stderr)
 
 	return args
 
@@ -61,8 +67,7 @@ def load_data (path, cuda = True):
 
 def out_file (filename):
 	import os
-        os .makedirs (args .out, exist_ok=True)
-	return os .path .join (image_folder_path, filename)
+	return os .path .join (args .out, filename)
 
 class VAE (nn .Module):
 	def __init__ (self):
