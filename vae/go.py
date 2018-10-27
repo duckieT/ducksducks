@@ -10,8 +10,8 @@ from torchvision .utils import save_image
 # hyperparameters
 input_image_size = (480, 640)
 input_image_channels = 3
-feature_space_size = 1000
-latent_space_size = 40
+feature_dimensions = 1000
+encoding_dimensions = 40
 
 learning_rate = 1e-3
 
@@ -20,8 +20,9 @@ test_sampling_n = 8
 
 
 def params ():
-	global feature_space_size
-	global latent_space_size
+	global learning_rate
+	global feature_dimensions
+	global encoding_dimensions
 
 	import argparse
 	import os
@@ -32,13 +33,14 @@ def params ():
 	parser .add_argument ('--test', type = str, default = '', metavar = 'path', help = 'path to a folder containing test images for the vae (default: training dataset)')
 	parser .add_argument ('--init', type = str, default = '', metavar = 'path', help = 'path to a trained model file for initializing training')
 
-	parser .add_argument ('--feature-size', type = int, default = feature_space_size, metavar = 'n', help = 'number of feature dimonsions (default: ' + str (feature_space_size) + ')')
-	parser .add_argument ('--latent-size', type = int, default = latent_space_size, metavar = 'n', help = 'number of latent space dimensions (default: ' + str (latent_space_size) + ')')
+	parser .add_argument ('--learning-rate', type = float, default = learning_rate, metavar = 'n', help = 'learning rate for adam (default: ' + str (learning_rate) + ')')
+	parser .add_argument ('--feature-dim', type = int, default = feature_dimensions, metavar = 'd', help = 'number of feature dimonsions (default: ' + str (feature_dimensions) + ')')
+	parser .add_argument ('--encoding-dim', type = int, default = encoding_dimensions, metavar = 'd', help = 'number of encoding dimensions (default: ' + str (encoding_dimensions) + ')')
 	
 	parser .add_argument ('--batch-size', type = int, default = 10, metavar = 'n', help = 'batch size for training (default: 10)')
 	parser .add_argument ('--epochs', type = int, default = 10, metavar = 'n', help = 'number of epochs to train (default: 10)')
 
-	parser .add_argument ('--log-interval', type = int, default = 10, metavar = 's', help = 'how many batches to wait before logging training status')
+	parser .add_argument ('--log-interval', type = int, default = 10, metavar = 's', help = 'how many batches to wait before logging training status (default: 10)')
 	parser .add_argument ('--seed', type = int, default = 1, metavar = 's', help = 'random seed (default: 1)')
 	parser .add_argument ('--no-cuda', action = 'store_true', default = False, help = 'disables CUDA training')
 
@@ -48,8 +50,9 @@ def params ():
 	args .cuda = not args .no_cuda and torch .cuda .is_available ()
 	args .test = args .test or args .data
 
-	feature_space_size = args .feature_size
-	latent_space_size = args .latent_size
+	learning_rate = args .learning_rate
+	feature_dimensions = args .feature_dim
+	encoding_dimensions = args .encoding_dim
 
 	os .makedirs (args .out, exist_ok = True)
 	if os .listdir (args .out):
@@ -79,21 +82,21 @@ def out_file (filename):
 	return os .path .join (args .out, filename)
 
 class VAE (nn .Module):
-	def __init__ (self):
+	def __init__ (self, feature_dimensions, encoding_dimensions):
 		super (VAE, self) .__init__ ()
 
-		self .fc1 = nn .Linear (input_image_size [0] * input_image_size [1], feature_space_size)
-		self .fc21 = nn .Linear (feature_space_size, latent_space_size)
-		self .fc22 = nn .Linear (feature_space_size, latent_space_size)
-		self .fc3 = nn .Linear (latent_space_size, feature_space_size)
-		self .fc4 = nn .Linear (feature_space_size, input_image_size [0] * input_image_size [1])
+		self .fc1 = nn .Linear (input_image_size [0] * input_image_size [1], feature_dimensions)
+		self .fc21 = nn .Linear (feature_dimensions, encoding_dimensions)
+		self .fc22 = nn .Linear (feature_dimensions, encoding_dimensions)
+		self .fc3 = nn .Linear (encoding_dimensions, feature_dimensions)
+		self .fc4 = nn .Linear (feature_dimensions, input_image_size [0] * input_image_size [1])
 
 	def encode (self, x):
 		h1 = F .relu (self .fc1 (x))
 		return self .fc21 (h1), self .fc22 (h1)
 
 	def reparameterize (self, mu, logvar):
-		std = torch .exp (0.5*logvar)
+		std = torch .exp (0.5 * logvar)
 		eps = torch .randn_like (std)
 		return eps .mul (std) .add_ (mu)
 
@@ -172,7 +175,7 @@ device = torch .device ('cuda' if args .cuda else 'cpu')
 train_loader = load_data (args .data, args .cuda)
 test_loader = load_data (args .test, args .cuda)
 
-model = VAE () .to (device)
+model = VAE (feature_dimensions, encoding_dimensions) .to (device)
 optimizer = optim .Adam (model .parameters (), lr = learning_rate)
 if args .init:
 	state = torch .load (args .init)
@@ -186,7 +189,7 @@ for epoch in range (epoch_offset, epoch_offset + args .epochs):
 	train (epoch)
 	test (epoch)
 	with torch .no_grad ():
-		sample = torch .randn (test_sampling_n ** 2, latent_space_size) .to (device)
+		sample = torch .randn (test_sampling_n ** 2, encoding_dimensions) .to (device)
 		sample = model .decode (sample) .cpu ()
 		save_image (sample .view (test_sampling_n ** 2, 1, input_image_size [0], input_image_size [1]),
 				out_file ('sample_' + str (epoch) + '.png'))
