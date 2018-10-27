@@ -153,10 +153,11 @@ def test (epoch):
 			recon_batch, mu, logvar = model (data)
 			total_test_loss += loss_function (recon_batch, data, mu, logvar) .item ()
 			if i == 0:
+				test_batch_size = min (data .size (0), args .batch_size)
 				n = min (data .size (0), test_sampling_n)
 				comparison = torch .cat ([
 						data [:n],
-						recon_batch .view (args .batch_size, input_image_channels, input_image_size [0], input_image_size [1]) [:n] ])
+						recon_batch .view (test_batch_size, input_image_channels, input_image_size [0], input_image_size [1]) [:n] ])
 				save_image (comparison .cpu (),
 						 out_file ('reconstruction_' + str (epoch) + '.png'), nrow = n)
 
