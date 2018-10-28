@@ -10,13 +10,16 @@ from torchvision .utils import save_image
 # hyperparameters
 input_image_size = (480, 640)
 input_image_channels = 3
+
+image_dimensions = input_image_channels * input_image_size [0] * input_image_size [1]
 feature_dimensions = 1000
 encoding_dimensions = 40
 
 learning_rate = 1e-3
 
 # test hyperparameters
-test_sampling_n = 8
+test_reconstruction_n = 8
+test_sample_n = 8
 
 def thing ():
 	class thing (dict):
@@ -99,28 +102,27 @@ def out_file (filename):
 	import os
 	return os .path .join (trainer_args .out, filename)
 
-from contextlib import contextmanager
-@contextmanager
 def load_state ():
-	yield torch .load (trainer_args .init) if trainer_args .init else {}
+	return torch .load (trainer_args .init) if trainer_args .init else {}
 	
 def save_state ():
-	return (
-	{ 'epoch': epoch
-	, 'rng': torch .get_rng_state ()
-	, 'model': model .state_dict ()
-	, 'optimizer': optimizer .state_dict () })
+	torch .save ((
+			{ 'epoch': epoch
+			, 'rng': torch .get_rng_state ()
+			, 'model': model .state_dict ()
+			, 'optimizer': optimizer .state_dict () })
+			, out_file ('state_' + str (epoch) + '.pt'))
 
 class VAE (nn .Module):
 	def __init__ (self, feature_dimensions, encoding_dimensions, activation, **kwargs):
 		super (VAE, self) .__init__ ()
 		self .activation = activation
 
-		self .fc1 = nn .Linear (input_image_size [0] * input_image_size [1], feature_dimensions)
+		self .fc1 = nn .Linear (image_dimensions, feature_dimensions)
 		self .fc21 = nn .Linear (feature_dimensions, encoding_dimensions)
 		self .fc22 = nn .Linear (feature_dimensions, encoding_dimensions)
 		self .fc3 = nn .Linear (encoding_dimensions, feature_dimensions)
-		self .fc4 = nn .Linear (feature_dimensions, input_image_size [0] * input_image_size [1])
+		self .fc4 = nn .Linear (feature_dimensions, image_dimensions)
 
 	def encode (self, x):
 		if self .activation == 'relu':
@@ -130,7 +132,7 @@ class VAE (nn .Module):
 		elif self .activation == 'selu':
 			h1 = F .selu (self .fc1 (x))
 		else:
-			raise 'unknown activation', self .activation
+			raise Exception ('unknown activation', self .activation)
 		return self .fc21 (h1), self .fc22 (h1)
 
 	def reparameterize (self, mu, logvar):
@@ -146,18 +148,18 @@ class VAE (nn .Module):
 		elif self .activation == 'selu':
 			h3 = F .selu (self .fc3 (z))
 		else:
-			raise 'unknown activation', self .activation
+			raise Exception ('unknown activation', self .activation)
 		return torch .sigmoid (self .fc4 (h3))
 
 	def forward (self, x):
-		mu, logvar = self .encode (x .view (-1, input_image_size [0] * input_image_size [1]))
+		mu, logvar = self .encode (x .view (-1, image_dimensions))
 		z = self .reparameterize (mu, logvar)
 		return self .decode (z), mu, logvar
 
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def objective (recon_x, x, mu, logvar):
-	BCE = F .binary_cross_entropy (recon_x, x .view (-1, input_image_size [0] * input_image_size [1]), reduction = 'sum')
+	BCE = F .binary_cross_entropy (recon_x, x .view (-1, image_dimensions), reduction = 'sum')
 
 	# see Appendix B from VAE paper:
 	# Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -202,7 +204,7 @@ def test (epoch):
 			total_test_loss += objective (recon_batch, batch_sample, mu, logvar) .item ()
 			if trainer_args .out and i == 0:
 				test_batch_size = min (batch_sample .size (0), trainer_args .batch_size)
-				n = min (batch_sample .size (0), test_sampling_n)
+				n = min (test_batch_size, test_reconstruction_n)
 				comparison = torch .cat (
 						[ batch_sample [:n]
 						, recon_batch .view (test_batch_size, input_image_channels, input_image_size [0], input_image_size [1]) [:n] ])
@@ -211,9 +213,9 @@ def test (epoch):
 	test_loss = total_test_loss / len (test_sampler .dataset)
 	print ('====> Test set loss: {:.4f}' .format (test_loss))
 	if trainer_args .out:
-		sample = torch .randn (test_sampling_n ** 2, encoding_dimensions) .to (device)
-		sample = model .decode (sample) .cpu ()
-		save_image (sample .view (test_sampling_n ** 2, input_image_channels, input_image_size [0], input_image_size [1])
+		encoding_sample = torch .randn (test_sample_n ** 2, encoding_dimensions) .to (device)
+		image_sample = model .decode (sample) .cpu ()
+		save_image (image_sample .view (test_sample_n ** 2, input_image_channels, input_image_size [0], input_image_size [1])
 				, out_file ('sample_' + str (epoch) + '.png'))
 
 
@@ -233,15 +235,15 @@ optimizer = optim .Adam (model .parameters (), lr = trainer_args .learning_rate)
 
 epoch_offset = 1
 
-with load_state () as state:
-	if 'rng' in state:
-		torch .set_rng_state (state ['rng'])
-	if 'model' in state:
-		model .load_state_dict (state ['model'])
-	if 'optimizer' in state:
-		optimizer .load_state_dict (state ['optimizer'])
-	if 'epoch' in state:
-		epoch_offset += state ['epoch']
+state = load_state ()
+if 'rng' in state:
+	torch .set_rng_state (state ['rng'])
+if 'model' in state:
+	model .load_state_dict (state ['model'])
+if 'optimizer' in state:
+	optimizer .load_state_dict (state ['optimizer'])
+if 'epoch' in state:
+	epoch_offset += state ['epoch']
 
 
 
@@ -249,5 +251,5 @@ for epoch in range (epoch_offset, epoch_offset + trainer_args .epochs):
 	train (epoch)
 	test (epoch)
 	
-if trainer_args .out:
-	torch .save (save_state (), out_file ('state_' + str (epoch) + '.pt'))
+	if trainer_args .out:
+		save_state ()
