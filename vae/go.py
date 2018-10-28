@@ -45,6 +45,8 @@ def params ():
 	parser .add_argument ('--batch-size', type = int, default = 10, metavar = 'n', help = 'batch size for training (default: 10)')
 	parser .add_argument ('--epochs', type = int, default = 10, metavar = 'n', help = 'number of epochs to train (default: 10)')
 
+	parser .add_argument ('--activation', type = str, default = 'relu', choices = ['relu', 'leaky_relu', 'selu'], metavar = 'a', help = 'activation function in the hidden layers (default: relu)')
+
 	parser .add_argument ('--log-interval', type = int, default = 10, metavar = 's', help = 'how many batches to wait before logging training status (default: 10)')
 	parser .add_argument ('--seed', type = int, default = 1, metavar = 's', help = 'random seed (default: 1)')
 	parser .add_argument ('--no-cuda', action = 'store_true', default = False, help = 'disables CUDA training')
@@ -68,6 +70,7 @@ def params ():
 	model_args = thing ()
 	model_args .feature_dimensions = args .feature_dim
 	model_args .encoding_dimensions = args .encoding_dim
+	model_args .activation = args .activation
 
 	os .makedirs (trainer_args .out, exist_ok = True)
 	if os .listdir (trainer_args .out):
@@ -109,8 +112,9 @@ def save_state ():
 	, 'optimizer': optimizer .state_dict () })
 
 class VAE (nn .Module):
-	def __init__ (self, feature_dimensions, encoding_dimensions, **kwargs):
+	def __init__ (self, feature_dimensions, encoding_dimensions, activation, **kwargs):
 		super (VAE, self) .__init__ ()
+		self .activation = activation
 
 		self .fc1 = nn .Linear (input_image_size [0] * input_image_size [1], feature_dimensions)
 		self .fc21 = nn .Linear (feature_dimensions, encoding_dimensions)
@@ -119,7 +123,14 @@ class VAE (nn .Module):
 		self .fc4 = nn .Linear (feature_dimensions, input_image_size [0] * input_image_size [1])
 
 	def encode (self, x):
-		h1 = F .relu (self .fc1 (x))
+		if self .activation == 'relu':
+			h1 = F .relu (self .fc1 (x))
+		elif self .activation == 'leaky_relu':
+			h1 = F .leaky_relu (self .fc1 (x))
+		elif self .activation == 'selu':
+			h1 = F .selu (self .fc1 (x))
+		else:
+			raise 'unknown activation', self .activation
 		return self .fc21 (h1), self .fc22 (h1)
 
 	def reparameterize (self, mu, logvar):
@@ -128,7 +139,14 @@ class VAE (nn .Module):
 		return eps .mul (std) .add_ (mu)
 
 	def decode (self, z):
-		h3 = F .relu (self .fc3 (z))
+		if self .activation == 'relu':
+			h3 = F .relu (self .fc3 (z))
+		elif self .activation == 'leaky_relu':
+			h3 = F .leaky_relu (self .fc3 (z))
+		elif self .activation == 'selu':
+			h3 = F .selu (self .fc3 (z))
+		else:
+			raise 'unknown activation', self .activation
 		return torch .sigmoid (self .fc4 (h3))
 
 	def forward (self, x):
