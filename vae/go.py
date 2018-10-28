@@ -106,6 +106,8 @@ def load_state ():
 	return torch .load (trainer_args .init) if trainer_args .init else {}
 	
 def save_state ():
+	torch .save ({ 'model': model .state_dict () }
+			, out_file ('model_' + str (epoch) + '.pt'))
 	torch .save ((
 			{ 'epoch': epoch
 			, 'rng': torch .get_rng_state ()
@@ -213,8 +215,8 @@ def test (epoch):
 	test_loss = total_test_loss / len (test_sampler .dataset)
 	print ('====> Test set loss: {:.4f}' .format (test_loss))
 	if trainer_args .out:
-		encoding_sample = torch .randn (test_sample_n ** 2, encoding_dimensions) .to (device)
-		image_sample = model .decode (sample) .cpu ()
+		encoding_sample = torch .randn (test_sample_n ** 2, model_args .encoding_dimensions) .to (device)
+		image_sample = model .decode (encoding_sample) .cpu ()
 		save_image (image_sample .view (test_sample_n ** 2, input_image_channels, input_image_size [0], input_image_size [1])
 				, out_file ('sample_' + str (epoch) + '.png'))
 
