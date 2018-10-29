@@ -174,14 +174,14 @@ def objective (recon_x, x, mu, logvar):
 
 def train (epoch):
 	model .train ()
-	train_loss = 0
+	total_train_loss = 0
 	for i, (batch_sample, _) in enumerate (train_sampler):
 		batch_sample = batch_sample .to (device)
 		optimizer .zero_grad ()
 		recon_batch, mu, logvar = model (batch_sample)
 		loss = objective (recon_batch, batch_sample, mu, logvar)
 		loss .backward ()
-		train_loss += loss .item ()
+		total_train_loss += loss .item ()
 		optimizer .step ()
 		if i % trainer_args .log_interval == 0:
 			print ('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}' .format 
@@ -191,9 +191,8 @@ def train (epoch):
 					, 100. * i / len (train_sampler)
 					, loss .item () / len (batch_sample)))
 
-	print ('====> Epoch: {} Average loss: {:.4f}' .format 
-			( epoch
-			, train_loss / len (train_sampler)))
+	train_loss = total_train_loss / len (train_sampler .dataset)
+	print ('====> Epoch: {} Average loss: {:.4f}' .format (epoch, train_loss))
 
 
 def test (epoch):
