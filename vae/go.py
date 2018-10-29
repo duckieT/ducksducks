@@ -55,6 +55,7 @@ def params ():
 	parser .add_argument ('--no-cuda', action = 'store_true', default = False, help = 'disables CUDA training')
 
 	parser .add_argument ('--out', type = str, default = None, metavar = 'path', help = 'path to a folder to store output')
+	parser .add_argument ('--out-model', action = 'store_true', default = False, help = 'output model_n.pt')
 
 	args = parser .parse_args ()
 
@@ -69,6 +70,7 @@ def params ():
 	trainer_args .cuda = not args .no_cuda and torch .cuda .is_available ()
 	trainer_args .init = args .init
 	trainer_args .out = args .out
+	trainer_args .out_model = args .out_model
 
 	model_args = thing ()
 	model_args .feature_dimensions = args .feature_dim
@@ -106,14 +108,15 @@ def load_state ():
 	return torch .load (trainer_args .init) if trainer_args .init else {}
 	
 def save_state ():
-	torch .save ({ 'model': model .state_dict () }
-			, out_file ('model_' + str (epoch) + '.pt'))
 	torch .save ((
 			{ 'epoch': epoch
 			, 'rng': torch .get_rng_state ()
 			, 'model': model .state_dict ()
 			, 'optimizer': optimizer .state_dict () })
 			, out_file ('state_' + str (epoch) + '.pt'))
+	if trainer_args .out_model:
+		torch .save ({ 'model': model .state_dict () }
+				, out_file ('model_' + str (epoch) + '.pt'))
 
 class VAE (nn .Module):
 	def __init__ (self, feature_dimensions, encoding_dimensions, activation, **kwargs):
