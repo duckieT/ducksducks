@@ -5,10 +5,10 @@ def params ():
 	import argparse
 	parser = argparse .ArgumentParser (description = 'pick a vae task')
 	
-	parser .add_argument ('--task', type = str, default = 'instruct', metavar = 'm', help = 'either: kind of vae task (' + ', ' .join (tasks)+ '), or path to existing task')
+	parser .add_argument ('--task', type = str, default = 'instruct', metavar = 'm', help = 'kind of vae task (' + ', ' .join (tasks)+ ')')
 
 	parser .add_argument ('--train', type = str, required = True, metavar = 'path', help = 'path to a folder containing training images for the vae')
-	parser .add_argument ('--test', type = str, required = True, metavar = 'path', help = 'path to a folder containing test images for the vae (default: training dataset)')
+	parser .add_argument ('--test', type = str, required = True, metavar = 'path', help = 'path to a folder containing test images for the vae')
 	parser .add_argument ('--out', type = str, required = True, metavar = 'path', help = 'path to a folder to store output')
 
 	parser .add_argument ('--learning-rate', type = float, default = learning_rate, metavar = 'n', help = 'learning rate for adam (default: ' + str (learning_rate) + ')')

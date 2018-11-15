@@ -5,7 +5,7 @@ def params ():
 	import argparse
 	parser = argparse .ArgumentParser (description = 'pick a vae model')
 	
-	parser .add_argument ('--model', type = str, required = True, metavar = 'm', help = 'either: kind of vae model (naive, cnn), or path to existing model')
+	parser .add_argument ('--model', type = str, required = True, metavar = 'm', help = 'kind of vae model (' + ', ' .join (models) + ')')
 
 	parser .add_argument ('--feature-dim', type = int, default = None, metavar = 'd', help = 'number of feature dimonsions (default: ' + str (feature_dimensions) + ')')
 	parser .add_argument ('--encoding-dim', type = int, default = None, metavar = 'd', help = 'number of encoding dimensions (default: ' + str (encoding_dimensions) + ')')
@@ -20,8 +20,11 @@ def params ():
 			, 'feature_dimensions': if_none (feature_dimensions, args .feature_dim)
 			, 'encoding_dimensions': if_none (encoding_dimensions, args .encoding_dim)
 			, 'activation': if_none (activation, args .activation) } })
-	elif args .model == 'cnn':
-		raise Exception ('jay hasnt implemented this yet')
+	elif args .model == 'snconv':
+		return (
+		{ 'model': 
+			{ 'model': 'snconv'
+			, 'encoding_dimensions': if_none (encoding_dimensions, args .encoding_dim) } })
 	else:
 		raise Exception ('unknown model', args .model)
 def if_none (default_, value):

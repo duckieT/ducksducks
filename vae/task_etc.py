@@ -118,13 +118,13 @@ def comparison_visualization (model, batch_sample, test_comparison_n):
 	reconstructed_sample, _, _ = model (batch_sample)
 	comparison = torch .cat (
 		[ batch_sample [:n]
-		, reconstructed_sample .view (-1, input_image_channels, input_image_size [0], input_image_size [1]) [:n] ],
+		, reconstructed_sample .view (-1, image_channels, image_size [0], image_size [1]) [:n] ],
 		2 )
 	return comparison .cpu ()
 
 def sampling_visualization (model, encoding_sample, test_sample_n):
 	image_sample = model .decode (encoding_sample) .cpu ()
-	return image_sample .view (test_sample_n ** 2, input_image_channels, input_image_size [0], input_image_size [1])
+	return image_sample .view (test_sample_n ** 2, image_channels, image_size [0], image_size [1])
 
 def load_samples (path, batch_size, cuda_ok = True):
 	import os
@@ -158,8 +158,6 @@ def instruct (model, objective, optimizer, train_sampler, test_sampler, device, 
 		comparison_visualization (model, image_sample, visualization_n),
 		sampling_visualization (model, encoding_sample, visualization_n) )
 
-def panic (reason):
-	raise Exception (reason)
 def thing ():
 	class thing (dict):
 		def __init__(self):
@@ -172,3 +170,5 @@ def thing ():
 		def __setattr__(self, attr, val):
 			self [attr] = val
 	return thing ()
+def panic (reason):
+	raise Exception (reason)
