@@ -13,6 +13,7 @@ def params ():
 
 	parser .add_argument ('--learning-rate', type = float, default = learning_rate, metavar = 'n', help = 'learning rate for adam (default: ' + str (learning_rate) + ')')
 	parser .add_argument ('--batch-size', type = int, default = batch_size, metavar = 'n', help = 'batch size for training (default: ' + str (batch_size) + ')')
+	parser .add_argument ('--epoch-offset', type = int, default = epoch_offset, metavar = 'n', help = 'number of epochs to skip (default: ' + str (epoch_offset) + ')')
 	parser .add_argument ('--epochs', type = int, default = epochs, metavar = 'n', help = 'number of epochs to train (default: ' + str (epochs) + ')')
 	parser .add_argument ('--log-interval', type = int, default = log_interval, metavar = 's', help = 'how many batches to wait before logging training status (default: ' + str (log_interval) + ')')
 	parser .add_argument ('--seed', type = int, default = 1, metavar = 's', help = 'random seed (default: 1)')
@@ -31,7 +32,7 @@ def params ():
 			, 'objective': 'vae'
 			, 'learning_rate': args .learning_rate
 			, 'batch_size': args .batch_size
-			, 'epoch_offset': 0
+			, 'epoch_offset': args .epoch_offset
 			, 'epochs': args .epochs
 			, 'log_interval': args .log_interval
 			, 'cuda_ok': not args .no_cuda and torch .cuda. is_available ()
