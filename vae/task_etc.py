@@ -155,8 +155,8 @@ def instruct (model, objective, optimizer, train_sampler, test_sampler, device, 
 	_, (image_sample, _) = next (enumerate (test_sampler))
 	encoding_sample = torch .randn (visualization_n ** 2, model .params ['encoding_dimensions'])
 	yield 'visualization', (
-		comparison_visualization (model, image_sample, visualization_n),
-		sampling_visualization (model, encoding_sample, visualization_n) )
+		comparison_visualization (model, image_sample .to (device), visualization_n),
+		sampling_visualization (model, encoding_sample .to (device), visualization_n) )
 
 def thing ():
 	class thing (dict):
