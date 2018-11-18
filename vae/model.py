@@ -25,6 +25,16 @@ def params ():
 		{ 'model': 
 			{ 'model': 'snconv'
 			, 'encoding_dimensions': if_none (encoding_dimensions, args .encoding_dim) } })
+	elif args .model == 'snconv2':
+		return (
+		{ 'model': 
+			{ 'model': 'snconv2'
+			, 'encoding_dimensions': if_none (encoding_dimensions, args .encoding_dim) } })
+	elif args .model == 'snconv3':
+		return (
+		{ 'model': 
+			{ 'model': 'snconv3'
+			, 'encoding_dimensions': if_none (encoding_dimensions, args .encoding_dim) } })
 	else:
 		raise Exception ('unknown model', args .model)
 def if_none (default_, value):
