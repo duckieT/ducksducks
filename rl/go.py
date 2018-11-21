@@ -1,6 +1,6 @@
 import sys
 import torch
-from model_etc import *
+from agent_etc import *
 from task_etc import *
 
 class param ():
@@ -18,7 +18,16 @@ def param_splat (params):
 		for key in splat: x [key] = splat [key]
 	return x
 
-params = param_splat ([ torch .load (file) for file in sys .argv [1:] ])
-model = load_model (params)
+# load_params = (
+# 	{ 'map_location': lambda x, y: 'cpu' } if not torch .cuda .is_available () else
+# 	{} )
+params = param_splat ([ torch .load (file, ** load_params) for file in sys .argv [1:] ])
+
+agent = (
+	load_agent (params) if 'agent' in params else
+	None )
+population = (
+	load_population (params) if 'population' in params else
+	None )
 task = load_task (params)
-task .go (model)
+task .go (population, adam = agent)

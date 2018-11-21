@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+files=""
+for file in "$@"; do
+	if [[ -p "$file" ]]; then
+		temp="$(mktemp)"
+		cat "$file" > "$temp"
+		files="$files """$temp""""
+		if [ ! -s "$temp" ]; then
+			exit 1 ;fi
+	else
+		files="$files """$file"""" ;fi ;done
+exec python -u "$(dirname "$0")/go.py" $files
