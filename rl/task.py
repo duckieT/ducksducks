@@ -7,9 +7,11 @@ def params ():
 	
 	parser .add_argument ('--task', type = str, default = 'evolve', metavar = 'x', help = 'kind of vae task (' + ', ' .join (tasks)+ ')')
 
-	parser .add_argument ('--env', type = str, default = env_name, metavar = 'env', help = 'name of duckie environment')
+	parser .add_argument ('--map', type = str, default = map_name, metavar = 'map', help = 'name of duckie map')
 	parser .add_argument ('--out', type = str, required = True, metavar = 'path', help = 'path to a folder to store output')
 
+	parser .add_argument ('--frame-skip', type = str, default = frame_skip, metavar = 'n', help = 'frames to skip per step')
+	parser .add_argument ('--distortion', type = bool, default = distortion, metavar = 'x', help = 'whether to fisheye the camera')
 	parser .add_argument ('--iteration-offset', type = int, default = iteration_offset, metavar = 'n', help = 'number of iterations to skip (default: ' + str (iteration_offset) + ')')
 	parser .add_argument ('--iterations', type = int, default = iterations, metavar = 'n', help = 'number of iterations to train (default: ' + str (iterations) + ')')
 	parser .add_argument ('--parallelism', type = int, default = parallelism, metavar = 'n', help = 'parallelism for training (default: ' + str (parallelism) + ')')
@@ -24,8 +26,10 @@ def params ():
 		return (
 		{ 'task': 
 			{ 'task': 'evolve'
-			, 'env_name': args .env
+			, 'map_name': args .map
 			, 'out_path': args .out
+			, 'frame_skip': args .frame_skip
+			, 'distortion': args .distortion
 			, 'iteration_offset': args .iteration_offset
 			, 'iterations': args .iterations
 			, 'parallelism': args .parallelism

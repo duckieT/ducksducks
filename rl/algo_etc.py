@@ -9,7 +9,7 @@ algos = ['ga']
 algo = 'ga'
 elite_proportion = 0.1
 mutation_sd = 1
-population_size = 100
+population_size = 50
 	
 def load_algo (params):
 	algo_params = params ['algo']
@@ -30,7 +30,7 @@ def init_ga (origination, culture, discrimination, reproduction, ** kwargs):
 		random_sampling (origination [1], origination [2]) if origination [0] == 'random' else
 		panic ('unrecognized origination kind: ' + str (origination [0])))
 	cultivate = (
-		hedonistic_culture if culture [0] == 'reward' else
+		parallel_hedonistic_culture if culture [0] == 'reward' else
 		panic ('unrecognized culture kind: ' + str (culture [0])))
 	elite_selection = (
 		proportional_selection (discrimination [1]) if discrimination [0] == 'proportion' else
@@ -78,15 +78,20 @@ def random_sampling (number, sd):
 		return [ random (adam) for _ in range (number) ]
 	return genesis
 
-def hedonistic_culture (habitat, population):
-	def life_by_reward (individual):
-		with habitat () as env:
-			life = yield_ (live (env, individual))
-			for moment in life: pass
-			reward = life .value
-			individual .fitness = reward
-			return individual
-	return (life_by_reward (individual) for individual in population)
+def parallel_hedonistic_culture (habitat, population):
+	def live_by_reward (individual):
+		from agent_etc import save_agent
+		return habitat () .find (life_by_reward, (save_agent (individual .genotype),))
+	jobs = [ live_by_reward (individual) for individual in population ]
+	return (job .get () for job in jobs)
+def life_by_reward (env, agent_info):
+	from agent_etc import load_agent
+	individual = bloodline (load_agent (agent_info))
+	life = yield_ (live (env, individual))
+	for moment in life: pass
+	reward = life .value
+	individual .fitness = reward
+	return individual
 
 def proportional_selection (proportion):
 	def elites (survivors, population):
@@ -132,18 +137,23 @@ def live (env, individual):
 	life = individual .reincarnate ()
 	total_reward = 0
 
-	alive = True
-	observation = env .reset ()
-	observation = torch .from_numpy (observation) .to (dtype = torch.float32) .permute (2, 0, 1)
-	while alive:
-		action = life .choice (observation)
-		observation, reward, dead, info = env .step (action)
+	try:
+		alive = True
+		observation = env .reset ()
 		observation = torch .from_numpy (observation) .to (dtype = torch.float32) .permute (2, 0, 1)
-		yield 'step', (observation, reward, dead, info)
-		total_reward += reward
-		alive = not dead
+		while alive:
+			action = life .choice (observation)
+			observation, reward, dead, info = env .step (action)
+			observation = torch .from_numpy (observation) .to (dtype = torch.float32) .permute (2, 0, 1)
+			yield 'step', (observation, reward, dead, info)
+			total_reward += reward
+			alive = not dead
+		life .killed = (reward != 0)
+		life .crashed = False
+	except:
+		life .killed = True
+		life .crashed = True
 		
-	life .killed = (reward != 0)
 	return total_reward
 
 def naive_mutation (mutation_sd):
@@ -163,25 +173,22 @@ def naive_mutation (mutation_sd):
 		return bloodline (mutated_genotype)
 	return mutate
 
-def bloodline (genotype):
-	import copy
-
-	device = next (genotype .parameters ()) .device
-	def reincarnate ():
+class bloodline ():
+	def __init__ (self, genotype):
+		self .device = next (genotype .parameters ()) .device
+		self .genotype = genotype
+	def reincarnate (self):
+		import copy
 		life = thing ()
 		def choice (observation):
 			with torch .no_grad ():
-				life .instinct .sense (observation .to (device))
+				life .instinct .sense (observation .to (self .device))
 				return life .instinct (life .instinct .recognition ())
 		life .instinct = copy .deepcopy (genotype)
 		life .instinct .vae = genotype .vae
 		life .instinct .eval ()
 		life .choice = choice
 		return life
-	it = thing ()
-	it .genotype = genotype
-	it .reincarnate = reincarnate
-	return it
 
 def thing ():
 	class thing (dict):
