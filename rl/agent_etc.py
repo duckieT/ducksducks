@@ -3,6 +3,7 @@ import numpy as np
 from torch import nn
 from torch .nn import functional as F
 from __.vae.model_etc import *
+from __.utils import *
 
 # hyperparameters
 
@@ -76,6 +77,3 @@ class ltd (nn .Module):
 		return self .policy (recall) .view (* self .action_size)
 
 # add agent with recall
-
-def panic (reason):
-	raise Exception (reason)

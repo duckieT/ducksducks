@@ -1,5 +1,6 @@
 import torch
 from model_etc import *
+from __.utils import *
 
 def params ():
 	import argparse
@@ -37,13 +38,6 @@ def params ():
 			, 'encoding_dimensions': if_none (encoding_dimensions, args .encoding_dim) } })
 	else:
 		raise Exception ('unknown model', args .model)
-def if_none (default_, value):
-	return default_ if value == None else value
-
-def just_say (text):
-	import os
-	tty = os .fdopen (os .open ('/dev/tty', os .O_WRONLY | os .O_NOCTTY), 'w', 1)
-	print (text, file = tty)
 
 just_say ('Generating model...')
 just_say ('--------------------------------------------------------------------------------')

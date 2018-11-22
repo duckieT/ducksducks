@@ -3,16 +3,17 @@ import sys
 import torch
 from agent_etc import *
 from algo_etc import *
+from __.utils import *
 
 # hyperparameters
-tasks = ['evolve']
+tasks = ['evolve', 'experience']
 task = 'evolve'
 map_name = 'loop_pedestrians'
 frame_skip = 3
 distortion = True
 iteration_offset = 0
 iterations = 1000
-parallelism = 1
+parallelism = 2
 log_interval = 10
 
 def load_task (params):
@@ -23,6 +24,8 @@ def load_task (params):
 			load_population (params) if 'population' in params else
 			None )
 		return init_evolve (** task_params, algo = algo, population = population)
+	elif task_params ['task'] == 'experience':
+		return init_experience (** task_params)
 def save_task (task):
 	return (
 	{ 'task':
@@ -69,13 +72,14 @@ def init_evolve (map_name, frame_skip, distortion, out_path, parallelism, iterat
 			adam .to (device) if not adam is None else
 			None )
 
-		habitat = pool_habitat (map_name, parallelism, frame_skip = frame_skip, distortion = distortion)
+		habitat = (
+			env_habitat (map_name, frame_skip = frame_skip, distortion = distortion) if parallelism == 1 else
+			pool_habitat (map_name, parallelism, frame_skip = frame_skip, distortion = distortion))
 		population = task .population
 
 		for iteration in range (iteration_offset, iterations):
 			i = 0
 			evolution = yield_ (task .algo .next_generation (population, habitat, adam = adam))
-			# TODO: add multiprocessing (aka process parallelism)
 			# TODO: move models to cuda per batch only
 			for status, progress in evolution:
 				if status == 'generation':
@@ -99,7 +103,7 @@ def init_evolve (map_name, frame_skip, distortion, out_path, parallelism, iterat
 			task .iteration_offset = iteration + 1
 			torch .save (save_task (task), file ('task_' + str (iteration + 1) + '.pt'))
 			torch .save (save_population (elites), file ('elites_' + str (iteration + 1) + '.pt'))
-			sample_visualization (elites [0], habitat, file ('sample_' + str (iteration + 1) + '.mp4'))
+			for moment in yield_ (sample_visualization (elites [0], habitat, file ('sample_' + str (iteration + 1) + '.mp4'))): pass
 	task .go = go_evolve
 
 	def file (filename):
@@ -107,13 +111,58 @@ def init_evolve (map_name, frame_skip, distortion, out_path, parallelism, iterat
 		return os .path .join (out_path, filename)
 
 	return task
+	
+def sample_visualization (bloodline, habitat, path):
+	life = yield from habitat .eval (bloodline, record = path)
+	value = yield from life
+	return value
+
+def init_experience (map_name, frame_skip, distortion, cuda_ok, ** kwargs):
+	# dont complain when killed
+	from signal import signal, SIGPIPE, SIG_DFL
+	signal (SIGPIPE ,SIG_DFL) 
+
+	habitat = env_habitat (map_name, frame_skip, distortion)
+	# make this useful
+	# device = torch .device ('cuda') if cuda_ok else torch .device ('cpu')
+	task = thing ()
+	def go_experience (log_file = '/dev/null'):
+		for line in sys .stdin:
+			line = line .split ('\n') [0]
+			print ('received\t' + line, file = open (log_file, 'a'))
+			job = line .split (':') [0]
+			command = line .split (':') [1]
+			rest = line .split (':') [2:]
+			
+			if command in [ 'experience', 'record' ]:
+				agent_path = rest [0]
+				genotype = load_agent (torch .load (agent_path))
+				individual = bloodline (genotype)
+				os .remove (agent_path)
+				if command == 'experience':
+					life = yield_ (habitat .eval (individual))
+					# for now
+					for moment in life: pass
+					contribution = yield_ (life .value)
+					# for now
+					for moment in contribution: pass
+					line = job + ':' + str (contribution .value)
+					print ('sending\t' + line, file = open (log_file, 'a'))
+					print (line)
+				elif command == 'record':
+					record_path = rest [1]
+					life = yield_ (sample_visualization (individual, habitat, record_path))
+					# for now
+					for moment in life: pass
+					line = job + ':' + str (life .value)
+					print ('sending\t' + line, file = open (log_file, 'a'))
+					print (line)
+	task .go = go_experience
+	return task
 
 def env_habitat (map_name, frame_skip = None, distortion = None):
 	class habitat ():
 		def __init__ (self):
-			# import gym
-			# import gym_duckietown
-			# self .env = gym .make (env_name)
 			from gym_duckietown.envs.duckietown_env import DuckietownEnv
 			args = { 'map_name': map_name, 'frame_skip': frame_skip, 'distortion': distortion }
 			self .env = DuckietownEnv (** { k: v for k, v in args .items () if not v is None })
@@ -122,83 +171,58 @@ def env_habitat (map_name, frame_skip = None, distortion = None):
 			return self .env
 		def __exit__ (self, e_type, e_value, e_traceback):
 			self .occupied = False
-		def find (self, then):
-			job = thing ()
-			def get ():
-				with self as env:
-					return then (env)
-			job .get = get
-			return job
+	def eval (individual, record = None):
+		yield 'moment', None
+		def contribution ():
+			from gym.wrappers.monitoring.video_recorder import VideoRecorder
+			with habitat () as env:
+				if record: recorder = VideoRecorder (env, record)
+				if record: recorder .capture_frame ()
+				yield 'env', env
+				life = yield_ (live (env, individual))
+				for moment in life:
+					if record: recorder .capture_frame ()
+					yield 'moment', moment
+				if record: recorder .close ()
+			return life .value
+		return contribution ()
+	habitat .eval = eval
 	return habitat
 
-def pool_habitat (map_name, parallelism, ** args):
-	import torch.multiprocessing as mp
-	jobs = mp .Queue ()
-	returns = mp .Queue ()
-	pool = [ mp .Process (target = __pooling, args = (map_name, args, jobs, returns)) .start () for i in range (parallelism) ]
-
-	class pool_habitat ():
+def pool_habitat (map_name, parallelism, frame_skip = None, distortion = None):
+	class habitat ():
 		def __enter__ (self):
-			panic ('jay has not figured out what to do')
+			panic ('can\'t handle synchronous')
 		def __exit__ (self, e_type, e_value, e_traceback):
-			panic ('jay has not figured out what to do')
-		def find (self, then, info):
-			import cloudpickle
-			jobs .put (cloudpickle .dumps ((then, info)))
-			return returns
-			# hack: this relies on being called in the same order
-	return pool_habitat
+			panic ('can\'t handle synchronous')
 
-class __pooled_habitat ():
-	def __init__ (self, map_name, ** args):
-		self .local_habitat = None
-		self .new_habitat = env_habitat (map_name, ** args)
-	def __enter__ (self):
-		if self .local_habitat is None:
-			self .local_habitat = self .new_habitat ()
-		return self .local_habitat .__enter__ ()
-	def __exit__ (self, e_type, e_value, e_traceback):
-		self .local_habitat .__exit__ (e_type, e_value, e_traceback)
-	def find (self, then):
-		job = thing ()
-		def get ():
-			with self as env:
-				return then (env)
-		job .get = get
+	def eval (individual, record = None):
+		job = next_job ()
+		if not record:
+			habitat .pool .put_work (job, 'experience', individual)
+		else:
+			habitat .pool .put_work (job, 'record', individual, record)
+		yield 'moment', 'fake life'
+		return collect (job)
+	habitat .eval = eval
+
+	def next_job ():
+		job = 'job-' + str (habitat .jobs)
+		habitat .jobs += 1
 		return job
-
-def __pooling (map_name, args, jobs, returns):
-	import pickle
-	local_habitat = __pooled_habitat (map_name, ** args)
-	while True:
-		_then, info = pickle .loads (jobs .get ())
-		with local_habitat as env:
-			returns .put (_then (env, * info))
-	
-
-def sample_visualization (bloodline, habitat, path):
-	with habitat () as env:
-		from gym.wrappers.monitoring.video_recorder import VideoRecorder
-		recorder = VideoRecorder (env, path)
-		for moment in live (env, bloodline): recorder .capture_frame ()
-		recorder .close ()
-
-def thing ():
-	class thing (dict):
-		def __init__(self):
-			pass
-		def __getattr__(self, attr):
-			try:
-				return self [attr]
-			except:
-				return None
-		def __setattr__(self, attr, val):
-			self [attr] = val
-	return thing ()
-class yield_:
-	def __init__ (self, gen):
-		self .gen = gen
-	def __iter__ (self):
-		self .value = yield from self .gen
-def panic (reason):
-	raise Exception (reason)
+	def collect (_job):
+		yield 'moment', 'fake life'
+		for job, result, taken in habitat .pool .get_work ():
+			if job == _job:
+				taken ()
+				return float (result)
+		else:
+			panic ('something is gravely ill')
+	habitat .jobs = 0
+	habitat .pool = pool (* 
+		[ parallelism,
+		{ 'task': 'experience'
+		, 'map': map_name
+		, 'frame_skip': frame_skip
+		, 'distortion': distortion } ] )
+	return habitat

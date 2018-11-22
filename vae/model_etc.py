@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from torch import nn
 from torch .nn import functional as F
+from __.utils import *
 
 # hyperparameters
 image_size = (640, 480)
@@ -237,5 +238,3 @@ class snconv3_vae (nn .Module):
 def output_size (input_size, model):
 	x = torch .randn (input_size) .unsqueeze (0)
 	return model (x) .size () [1:]
-def panic (reason):
-	raise Exception (reason)

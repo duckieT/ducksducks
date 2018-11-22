@@ -1,5 +1,6 @@
 import torch
 from algo_etc import *
+from __.utils import *
 
 def params ():
 	import argparse
@@ -28,13 +29,6 @@ def params ():
 			, 'reproduction': ('mutation-only', mutation_sd_arg, population_arg) } })
 	else:
 		raise Exception ('unknown algo', args .algo)
-def if_none (default_, value):
-	return default_ if value == None else value
-
-def just_say (text):
-	import os
-	tty = os .fdopen (os .open ('/dev/tty', os .O_WRONLY | os .O_NOCTTY), 'w', 1)
-	print (text, file = tty)
 
 just_say ('Generating algo...')
 just_say ('--------------------------------------------------------------------------------')

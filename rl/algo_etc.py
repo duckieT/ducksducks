@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from torch import nn
 from torch .nn import functional as F
+from __.utils import *
 
 # hyperparameters
 
@@ -30,7 +31,7 @@ def init_ga (origination, culture, discrimination, reproduction, ** kwargs):
 		random_sampling (origination [1], origination [2]) if origination [0] == 'random' else
 		panic ('unrecognized origination kind: ' + str (origination [0])))
 	cultivate = (
-		parallel_hedonistic_culture if culture [0] == 'reward' else
+		hedonistic_culture if culture [0] == 'reward' else
 		panic ('unrecognized culture kind: ' + str (culture [0])))
 	elite_selection = (
 		proportional_selection (discrimination [1]) if discrimination [0] == 'proportion' else
@@ -78,20 +79,18 @@ def random_sampling (number, sd):
 		return [ random (adam) for _ in range (number) ]
 	return genesis
 
-def parallel_hedonistic_culture (habitat, population):
-	def live_by_reward (individual):
-		from agent_etc import save_agent
-		return habitat () .find (life_by_reward, (save_agent (individual .genotype),))
-	jobs = [ live_by_reward (individual) for individual in population ]
-	return (job .get () for job in jobs)
-def life_by_reward (env, agent_info):
-	from agent_etc import load_agent
-	individual = bloodline (load_agent (agent_info))
-	life = yield_ (live (env, individual))
-	for moment in life: pass
-	reward = life .value
-	individual .fitness = reward
-	return individual
+def hedonistic_culture (habitat, population):
+	contributions = []
+	for individual in population:
+		life = yield_ (habitat .eval (individual))
+		for moment in life: pass
+		contributions += [ (life .value, individual) ]
+	def hedonistic_life (value, individual):
+		reward = yield_ (value)
+		for moment in reward: pass
+		individual .fitness = reward .value
+		return individual
+	return (hedonistic_life (value, individual) for value, individual in contributions)
 
 def proportional_selection (proportion):
 	def elites (survivors, population):
@@ -151,6 +150,8 @@ def live (env, individual):
 		life .killed = (reward != 0)
 		life .crashed = False
 	except:
+		import traceback
+		just_say (traceback.format_exc()) 
 		life .killed = True
 		life .crashed = True
 		
@@ -173,39 +174,22 @@ def naive_mutation (mutation_sd):
 		return bloodline (mutated_genotype)
 	return mutate
 
-class bloodline ():
-	def __init__ (self, genotype):
-		self .device = next (genotype .parameters ()) .device
-		self .genotype = genotype
-	def reincarnate (self):
+def bloodline (genotype):
+	device = next (genotype .parameters ()) .device
+	def reincarnate ():
 		import copy
+
 		life = thing ()
 		def choice (observation):
 			with torch .no_grad ():
-				life .instinct .sense (observation .to (self .device))
+				life .instinct .sense (observation .to (device))
 				return life .instinct (life .instinct .recognition ())
 		life .instinct = copy .deepcopy (genotype)
 		life .instinct .vae = genotype .vae
 		life .instinct .eval ()
 		life .choice = choice
 		return life
-
-def thing ():
-	class thing (dict):
-		def __init__(self):
-			pass
-		def __getattr__(self, attr):
-			try:
-				return self [attr]
-			except:
-				return None
-		def __setattr__(self, attr, val):
-			self [attr] = val
-	return thing ()
-class yield_:
-	def __init__ (self, gen):
-		self .gen = gen
-	def __iter__ (self):
-		self .value = yield from self .gen
-def panic (reason):
-	raise Exception (reason)
+	it = thing ()
+	it .genotype = genotype
+	it .reincarnate = reincarnate
+	return it

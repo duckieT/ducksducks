@@ -1,5 +1,6 @@
 import torch
 from task_etc import *
+from __.utils import *
 
 def params ():
 	import argparse
@@ -39,14 +40,6 @@ def params ():
 			, 'seed': args .seed } })
 	else:
 		panic ('unknown task', args .task)
-
-def if_none (default_, value):
-	return default_ if value == None else value
-
-def just_say (text):
-	import os
-	tty = os .fdopen (os .open ('/dev/tty', os .O_WRONLY | os .O_NOCTTY), 'w', 1)
-	print (text, file = tty)
 
 just_say ('Generating task...')
 just_say ('--------------------------------------------------------------------------------')

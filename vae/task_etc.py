@@ -5,6 +5,7 @@ from torch import nn, optim
 from torch .nn import functional as F
 from torchvision .utils import save_image as write_image
 from model_etc import *
+from __.utils import *
 
 # hyperparameters
 tasks = ['instruct']
@@ -162,18 +163,3 @@ def instruct (model, objective, optimizer, train_sampler, test_sampler, device, 
 	yield 'visualization', (
 		comparison_visualization (model, image_sample .to (device), visualization_n),
 		sampling_visualization (model, encoding_sample .to (device), visualization_n) )
-
-def thing ():
-	class thing (dict):
-		def __init__(self):
-			pass
-		def __getattr__(self, attr):
-			try:
-				return self [attr]
-			except:
-				return None
-		def __setattr__(self, attr, val):
-			self [attr] = val
-	return thing ()
-def panic (reason):
-	raise Exception (reason)

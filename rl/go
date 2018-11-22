@@ -9,4 +9,5 @@ for file in "$@"; do
 			exit 1 ;fi
 	else
 		files="$files """$file"""" ;fi ;done
+export PYGLET_DEBUG_GL=True
 exec python -u "$(dirname "$0")/go.py" $files

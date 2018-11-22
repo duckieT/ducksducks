@@ -1,5 +1,6 @@
 import torch
 from agent_etc import *
+from __.utils import *
 
 def params ():
 	import argparse
@@ -23,13 +24,6 @@ def params ():
 			, 'action_size': action_size } })
 	else:
 		raise Exception ('unknown agent', args .agent)
-def if_none (default_, value):
-	return default_ if value == None else value
-
-def just_say (text):
-	import os
-	tty = os .fdopen (os .open ('/dev/tty', os .O_WRONLY | os .O_NOCTTY), 'w', 1)
-	print (text, file = tty)
 
 just_say ('Generating agent...')
 just_say ('--------------------------------------------------------------------------------')
