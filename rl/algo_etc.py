@@ -9,11 +9,11 @@ algos = ['ga']
 algo = 'ga'
 elite_proportion = 0.1
 mutation_sd = 1
-population_size = 10000
+population_size = 100
 	
 def load_algo (params):
 	algo_params = params ['algo']
-	if algo_params ['algo'] == 'algo':
+	if algo_params ['algo'] == 'ga':
 		return init_ga (** algo_params)
 	else:
 		panic ('unrecognized algo kind: ' + str (algo_params ['algo']))
@@ -33,7 +33,7 @@ def init_ga (origination, culture, discrimination, reproduction, ** kwargs):
 		hedonistic_culture if culture [0] == 'reward' else
 		panic ('unrecognized culture kind: ' + str (culture [0])))
 	elite_selection = (
-		elite_proporiton (discrimination [1]) if discrimination [0] == 'proportion' else
+		proportional_selection (discrimination [1]) if discrimination [0] == 'proportion' else
 		panic ('unrecognized discrimination kind: ' + str (discrimination [0])))
 	repopulate = (
 		naive_mutation_population (reproduction [1], reproduction [2]) if reproduction [0] == 'mutation-only' else
@@ -48,26 +48,28 @@ def init_ga (origination, culture, discrimination, reproduction, ** kwargs):
 		, 'reproduction': reproduction })
 
 	def evolve (population, habitat, adam = None):
+		yield 'generation', None
 		if population is None:
-			yield 'origination'
+			yield 'origination', None
 			population = aborigination (adam)
-		yield 'generation'
-		yield 'cultivate'
+			yield 'originated', population
+		else:
+			yield 'reproduce', None
+			population = repopulate (population)
+			yield 'reproduced', population
+		yield 'cultivate', None
 		survivors = cultivate (habitat, population)
-		yield 'discriminate'
-		elites = yield from elite_selection (survivors)
-		yield 'reproduce'
-		return repopulate (elites)
-	def to (device):
-		# move to device
-		return ga
+		yield 'cultivated', survivors
+		yield 'discriminate', None
+		elites = yield from elite_selection (survivors, population)
+		yield 'discriminated', elites
+		return elites
 	ga .next_generation = evolve
-	ga .to = to
 	return ga
 
 def random_sampling (number, sd):
 	def genesis (agent):
-		parameters_origin = { i: torch .zeros (parameter .size ()) for i, parameter in agent .state_dict () }
+		parameters_origin = { i: torch .zeros (parameter .size ()) for i, parameter in agent .state_dict () .items () }
 		agent .load_state_dict (parameters_origin)
 		adam = bloodline (agent)
 
@@ -78,35 +80,37 @@ def random_sampling (number, sd):
 
 def hedonistic_culture (habitat, population):
 	def life_by_reward (individual):
-		env = habitat ()
-		reward = live (env, individual)
-		individual .fitness = reward
-		return individual
+		with habitat () as env:
+			life = yield_ (live (env, individual))
+			for moment in life: pass
+			reward = life .value
+			individual .fitness = reward
+			return individual
 	return (life_by_reward (individual) for individual in population)
 
-def elite_proportion (proportion):
-	def elites (survivors):
+def proportional_selection (proportion):
+	def elites (survivors, population):
 		import math
 
-		elites_size = math .ceil (proportion * len (evolution))
+		elites_size = math .ceil (proportion * len (population))
 		elites = []
-		def rank (elites, fitness):
+		def rank (elites, individual):
 			if len (elites) == 0:
 				return 0
 			elif len (elites) == 1:
-				if elites [0] .fitness < fitness:
+				if elites [0] .fitness < individual .fitness:
 					return 0
 				else:
 					return 1
 			else:
 				median = len (elites) // 2
-				if elites [median] .fitness < fitness:
-					return rank (elites [:median], fitness)
+				if elites [median] .fitness < individual .fitness:
+					return rank (elites [:median], individual)
 				else:
-					return median + rank (elites [median:], fitness)
+					return median + rank (elites [median:], individual)
 		for individual in survivors:
 			individual_index = rank (elites, individual)
-			if individual_index >= elites_size:
+			if individual_index < elites_size:
 				elites = elites [:individual_index] + [ individual ] + elites [individual_index:]
 			yield 'discriminating', elites
 		yield 'discriminated', elites
@@ -119,7 +123,7 @@ def naive_mutation_population (mutation_sd, population_size):
 		import random
 
 		children_room = population_size - len (elites)
-		children = [ mutate (elites [i]) for i in random .sample (xrange (len (elites)), children_room) ]
+		children = [ mutate (elites [i]) for i in random .choices (range (len (elites)), k = children_room) ]
 		return elites + children
 		
 	return next_gen
@@ -130,10 +134,12 @@ def live (env, individual):
 
 	alive = True
 	observation = env .reset ()
+	observation = torch .from_numpy (observation) .to (dtype = torch.float32) .permute (2, 0, 1)
 	while alive:
 		action = life .choice (observation)
 		observation, reward, dead, info = env .step (action)
-		yield observation, reward, dead, info
+		observation = torch .from_numpy (observation) .to (dtype = torch.float32) .permute (2, 0, 1)
+		yield 'step', (observation, reward, dead, info)
 		total_reward += reward
 		alive = not dead
 		
@@ -145,25 +151,30 @@ def naive_mutation (mutation_sd):
 		import copy
 
 		genotype = individual .genotype
-		genes = genotype .state_dict ()
+		genotype_state = genotype .state_dict ()
+		genes = { layer: parameter for layer, parameter in genotype_state .items () if not 'vae' in layer }
 		mutated_genes = (
-			{ i: chromosome + torch .normal (torch .zeros (chromosome .size ()), mutation_sd)
+			{ i: chromosome + torch .normal (torch .zeros (chromosome .size ()) .to (chromosome .device), mutation_sd)
 				for i, chromosome in genes .items () })
+		genotype_state .update (mutated_genes)
 		mutated_genotype = copy .deepcopy (genotype)
-		mutated_genotype .load_state_dict (mutated_genes)
+		mutated_genotype .vae = genotype .vae
+		mutated_genotype .load_state_dict (genotype_state)
 		return bloodline (mutated_genotype)
 	return mutate
 
 def bloodline (genotype):
 	import copy
 
+	device = next (genotype .parameters ()) .device
 	def reincarnate ():
 		life = thing ()
 		def choice (observation):
 			with torch .no_grad ():
-				life .instict .sense (observation)
+				life .instinct .sense (observation .to (device))
 				return life .instinct (life .instinct .recognition ())
 		life .instinct = copy .deepcopy (genotype)
+		life .instinct .vae = genotype .vae
 		life .instinct .eval ()
 		life .choice = choice
 		return life
@@ -184,5 +195,10 @@ def thing ():
 		def __setattr__(self, attr, val):
 			self [attr] = val
 	return thing ()
+class yield_:
+	def __init__ (self, gen):
+		self .gen = gen
+	def __iter__ (self):
+		self .value = yield from self .gen
 def panic (reason):
 	raise Exception (reason)

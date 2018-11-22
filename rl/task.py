@@ -7,11 +7,12 @@ def params ():
 	
 	parser .add_argument ('--task', type = str, default = 'evolve', metavar = 'x', help = 'kind of vae task (' + ', ' .join (tasks)+ ')')
 
+	parser .add_argument ('--env', type = str, default = env_name, metavar = 'env', help = 'name of duckie environment')
 	parser .add_argument ('--out', type = str, required = True, metavar = 'path', help = 'path to a folder to store output')
 
 	parser .add_argument ('--iteration-offset', type = int, default = iteration_offset, metavar = 'n', help = 'number of iterations to skip (default: ' + str (iteration_offset) + ')')
 	parser .add_argument ('--iterations', type = int, default = iterations, metavar = 'n', help = 'number of iterations to train (default: ' + str (iterations) + ')')
-	parser .add_argument ('--batch-size', type = int, default = batch_size, metavar = 'n', help = 'batch size for training (default: ' + str (batch_size) + ')')
+	parser .add_argument ('--parallelism', type = int, default = parallelism, metavar = 'n', help = 'parallelism for training (default: ' + str (parallelism) + ')')
 	parser .add_argument ('--log-interval', type = int, default = log_interval, metavar = 'n', help = 'how many batches to wait before logging training status (default: ' + str (log_interval) + ')')
 	parser .add_argument ('--seed', type = int, default = 1, metavar = 's', help = 'random seed (default: 1)')
 	parser .add_argument ('--no-cuda', action = 'store_true', default = False, help = 'disables cuda training')
@@ -23,10 +24,11 @@ def params ():
 		return (
 		{ 'task': 
 			{ 'task': 'evolve'
+			, 'env_name': args .env
 			, 'out_path': args .out
 			, 'iteration_offset': args .iteration_offset
 			, 'iterations': args .iterations
-			, 'batch_size': args .batch_size
+			, 'parallelism': args .parallelism
 			, 'log_interval': args .log_interval
 			, 'seed': args .seed
 			, 'cuda_ok': not args .no_cuda and torch .cuda. is_available () } })
@@ -45,4 +47,4 @@ just_say ('Generating task...')
 just_say ('--------------------------------------------------------------------------------')
 torch .save (params (), '/dev/stdout')
 just_say ('--------------------------------------------------------------------------------')
-just_say ('Instructor generated!')
+just_say ('Task generated!')

@@ -4,7 +4,7 @@ from torch import nn
 from torch .nn import functional as F
 
 # hyperparameters
-image_size = (480, 640)
+image_size = (640, 480)
 image_channels = 3
 
 image_dimensions = image_channels * image_size [0] * image_size [1]
