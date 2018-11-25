@@ -13,11 +13,12 @@ elite_overselection = 3
 elite_trials = 10
 mutation_sd = 1
 population_size = 1000
+batch_size = 100
 	
 def load_algo (params):
 	algo_params = params ['algo']
 	if algo_params ['algo'] == 'ga':
-		return init_ga (** algo_params)
+		return ga_algo (** algo_params)
 	else:
 		panic ('unrecognized algo kind: ' + str (algo_params ['algo']))
 def save_algo (algo):
@@ -28,21 +29,21 @@ def save_algo (algo):
 	else:
 		panic ('unrecognized algo kind: ' + str (algo .params ['algo']))
 
-def init_ga (origination, culture, discrimination, reproduction, ** kwargs):
+def ga_algo (origination, culture, discrimination, reproduction, batch_size = 1, ** kwargs):
 	aborigination = (
 		random_sampling (origination [1], origination [2]) if origination [0] == 'random' else
-		panic ('unrecognized origination kind: ' + str (origination [0])))
+		panic ('unrecognized origination kind: ' + str (origination [0])) )
 	cultivate = (
 		hedonistic_culture if culture [0] == 'reward' else
-		panic ('unrecognized culture kind: ' + str (culture [0])))
+		panic ('unrecognized culture kind: ' + str (culture [0])) )
 
 	elite_proportion, elite_overselection, elite_trials = (
 		discrimination [1], 1, 1 if discrimination [0] == 'proportion' else
 		discrimination [1:] if discrimination [0] == 'overproportion' else
-		panic ('unrecognized discrimination kind: ' + str (discrimination [0])))
+		panic ('unrecognized discrimination kind: ' + str (discrimination [0])) )
 	mutation_sd, population_size = (
 		reproduction [1:] if reproduction [0] == 'mutation-only' else
-		panic ('unrecognized reproduction kind: ' + str (reproduction [0])))
+		panic ('unrecognized reproduction kind: ' + str (reproduction [0])) )
 	repopulate = naive_mutation_population (mutation_sd, population_size)
 
 	ga = thing ()
@@ -63,9 +64,9 @@ def init_ga (origination, culture, discrimination, reproduction, ** kwargs):
 			yield 'reproduce', population_size
 			population = repopulate (population)
 			yield 'reproduced', population
-		survivors = cultivate (habitat, population)
+		survivors = cultivate (habitat, population, batch_size = batch_size)
 		tentative_elites = yield from fixed_selection (elite_proportion * elite_overselection * population_size) (survivors)
-		surviving_elites = cultivate (habitat, tentative_elites, elite_trials)
+		surviving_elites = cultivate (habitat, tentative_elites, elite_trials, batch_size = batch_size)
 		elites = yield from fixed_selection (elite_proportion * population_size) (surviving_elites)
 		return elites
 	ga .next_generation = evolve
@@ -84,27 +85,42 @@ def random_sampling (number, sd):
 		return ( random (adam) for _ in range (number) )
 	return genesis
 
-def hedonistic_culture (habitat, population, trials = 1):
-	contributions = []
-	for individual in population:
-		values = []
+def hedonistic_culture (habitat, population, trials = 1, batch_size = 1):
+	def chunks (iterable, size):
+		from itertools import chain, islice
+		iterator = iter (iterable)
+		for first in iterator:
+			just_say ('chunking one batch')
+			yield chain ([first], islice (iterator, size - 1))
+	def contributed_individual (individual):
+		contributions = []
 		for i in range (trials):
 			life = yield_ (habitat .tryout (individual))
 			for moment in life: pass
-			values += [ life .value ]
-		contributions += [ (values, individual) ]
-	def hedonistic_life (values, individual):
-		rewards = ( yield_ (value) for value in values )
-		for reward in rewards:
+			contributions += [ life .value ]
+		return contributions, individual
+	def cultured_individual (contributions, individual):
+		def contribution_reward (contribution):
+			reward = yield_ (contribution)
 			for moment in reward: pass
-		individual .fitness = sum ([ reward .value for reward in rewards ]) / trials
+			return reward .value
+		rewards = ( contribution_reward (contribution) for contribution in contributions )
+		individual .fitness = sum (rewards) / trials
 		return individual
-	return (hedonistic_life (values, individual) for values, individual in contributions)
+	def contribued_batch (individuals):
+		just_say ('issuing one batch')
+		return [ contributed_individual (individual) for individual in individuals ]
+	def cultured_batch (contribued_batch):
+		just_say ('culturing one batch') 
+		return ( cultured_individual (contributions, individual) for contributions, individual in contribued_batch )
+		
+	return (individual for batch in chunks (population, batch_size) for individual in cultured_batch (contribued_batch (batch)))
 
 def fixed_selection (elites_size):
 	def elites (survivors):
 		elites = []
 		for individual in survivors:
+			just_say ('received one survivor')
 			individual_index = rank (elites, individual)
 			if individual_index < elites_size:
 				elites = elites [:individual_index] + [ individual ] + elites [individual_index:]
@@ -156,10 +172,11 @@ def live (env, individual):
 		life .killed = (reward != 0)
 		life .crashed = False
 	except:
+		import sys
 		import traceback
-		just_say ('crashed!') 
-		print (observation, reward, dead, info)
-		just_say (traceback.format_exc()) 
+		print ('crashed!', file = sys .stderr) 
+		print (observation, reward, dead, info, file = sys .stderr) 
+		print (traceback .format_exc (), file = sys .stderr) 
 		life .killed = True
 		life .crashed = True
 		

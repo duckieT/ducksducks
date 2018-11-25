@@ -177,8 +177,9 @@ def env_habitat (map_name, frame_skip = None, distortion = None):
 		def __exit__ (self, e_type, e_value, e_traceback):
 			self .occupied = False
 	def tryout (individual, record = None):
-		yield 'moment', None
+		yield 'moment', 'fake'
 		def contribution ():
+			yield 'moment', 'starting'
 			try:
 				from gym.wrappers.monitoring.video_recorder import VideoRecorder
 				with habitat () as env:
@@ -190,7 +191,7 @@ def env_habitat (map_name, frame_skip = None, distortion = None):
 						if record: recorder .capture_frame ()
 						yield 'moment', moment
 					if record: recorder .close ()
-				return life .value
+					return life .value
 			except AssertionError:
 				self = yield from contribution ()
 				return self
@@ -236,5 +237,6 @@ def pool_habitat (map_name, parallelism, frame_skip = None, distortion = None, p
 			+ ' --map ' + map_name + ' --frame-skip ' + str (frame_skip) \
 			+ ' --distortion ' + str (distortion) + ')'
 		, parallelism ]
+		, max_jobs = 100000
 		, log_file = pool_log_file )
 	return habitat

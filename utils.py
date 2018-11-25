@@ -52,6 +52,10 @@ def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
 		bash (command + ' <"' + send + '" >>"' + rcv + '" &')
 		it .jobs += [{}]
 
+	def clean_pool ():
+		os .killpg (0, SIGKILL)
+	atexit .register (clean_pool)
+		
 	def running_jobs ():
 		return sum ([ len ([ job for job in jobs .values () if job is None ]) for jobs in it .jobs ])
 	def spare (jobs):
