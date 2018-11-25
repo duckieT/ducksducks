@@ -1,21 +1,39 @@
-def pool (parallelism, args, tmp_dir = '/dev/shm/', log_file = '/dev/null'):
-	import os
-	os .system ('bash -c \'rm /dev/shm/pool-* 2>/dev/null\'')
-	def tmp ():
-		import random
-		tmp_path = os .path .join (tmp_dir, 'pool-' + str (random .getrandbits (32)))
-		if os .path .exists (tmp_path):
-			return tmp ()
-		else:
-			return tmp_path
+import os
+import atexit
 
-	def spare (jobs):
-		busiest = max ([len (job) for job in jobs])
-		for i, job in enumerate (jobs):
-			if len (job) != busiest:
-				return i
-		else:
-			return 0
+def bash (cmd):
+	escaped_cmd = '\'\'\\\'' .join (cmd .split ('\''))
+	return os .system ('bash -c \'' + escaped_cmd + '\'')
+
+tmp_dir = '/dev/shm/'
+def tmp (for_what = None):
+	import random
+	marking = (
+		for_what + '-' if not for_what is None else
+		'' )
+	tmp_path = os .path .join (tmp_dir, 'pool-' + marking + str (random .getrandbits (32)))
+	if os .path .exists (tmp_path):
+		return tmp ()
+	else:
+		return tmp_path
+def package (goods = None, ** kwargs):
+	num_of_goods = ( 0 if goods is None else 1 ) + len (kwargs)
+	if num_of_goods != 1:
+		panic ('ur doin it wrong bruh')
+	import torch
+	package = (
+		tmp () if not goods is None else
+		tmp (next (iter (kwargs .keys ()))) )
+	if goods is None:
+		goods = next (iter (kwargs .values ())) 
+	os .makedirs (package), os .rmdir (package), torch .save (goods, package)
+	return package
+def clean_tmp ():
+	bash ('rm "' + tmp_dir + 'pool-*" 2>/dev/null')
+atexit .register (clean_tmp)
+
+def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
+	max_jobs = if_none (10 * parallelism, max_jobs)
 	
 	it = thing ()
 	it .send = []
@@ -27,34 +45,52 @@ def pool (parallelism, args, tmp_dir = '/dev/shm/', log_file = '/dev/null'):
 	os .makedirs (rcv), os .rmdir (rcv), os .mkfifo (rcv)
 	it .rcv = rcv
 
-	pretty_args = ' ' .join ('--' + '-' .join (key .split ('_')) + ' ' + str (val) for key, val in args .items ())
 	for i in range (parallelism):
 		send = tmp ()
 		os .makedirs (send), os .rmdir (send), os .mkfifo (send)
 		it .send += [send]
-		os .system ('bash -c \'./go <(./task ' + pretty_args + ') <"' + send + '" >> "' + rcv + '" &\'')
+		bash (command + ' <"' + send + '" >>"' + rcv + '" &')
 		it .jobs += [{}]
+
+	def running_jobs ():
+		return sum ([ len ([ job for job in jobs .values () if job is None ]) for jobs in it .jobs ])
+	def spare (jobs):
+		busiest = max ([len (job) for job in jobs])
+		for i, job in enumerate (jobs):
+			if len (job) != busiest:
+				return i
+		else:
+			return 0
 		
-	def assign_work (n, job, * command):
-		it .jobs [n] = { ** it .jobs [n], job: None }
+	def assign_work (n, job, * order):
+		if job != 'just':
+			it .jobs [n] = { ** it .jobs [n], job: None }
+		# what if job already exists?
 		if not n in it .send_fps:
 			it .send_fps [n] = os .open (it .send [n], os .O_WRONLY | os .O_NONBLOCK)
 		if not n in it .send_fds:
 			it .send_fds [n] = os .fdopen (it .send_fps [n], 'w', 1)
-		line = ':' .join ([job, * command ])
+		line = ':' .join ([job, * order ])
 		print ('sending\t' + line, file = open (log_file, 'a'))
 		print (line, file = it .send_fds [n])
 		it .send_fds [n] .flush ()
-	def put_work (job, command, individual, * rest):
-		import torch
-		from __.rl.agent_etc import save_agent
-
+		
+		if running_jobs () > max_jobs:
+			for _ in get_work ():
+				if running_jobs () > max_jobs:
+					continue
+				else:
+					break
+			else:
+				panic ('something very grave has happened')
+			
+	def put_work (job, * order):
 		n = spare (it .jobs)
-		agent = tmp ()
-		os .makedirs (agent), os .rmdir (agent)
-		# change to only send agent (aka no model)
-		torch .save (save_agent (individual .genotype), agent)
-		assign_work (n, job, command, agent, * rest)
+		assign_work (n, job, * order)
+	def broadcast_work (job, * order):
+		# ONLY works for job == 'just'! other jobs will cause a mysterious job panic!
+		for n in range (parallelism):
+			assign_work (n, job, * order)
 	def get_work ():
 		def complete (job):
 			def record_done ():
@@ -69,13 +105,9 @@ def pool (parallelism, args, tmp_dir = '/dev/shm/', log_file = '/dev/null'):
 			line = line .split ('\n') [0]
 			print ('received\t' + line, file = open (log_file, 'a'))
 			job, result = line .split (':')
-			record = { 'done': False }
-			def complete ():
-				record ['done'] = True
-			yield job, result, complete
-			if not record ['done']:
-				record_job (job, result)
-	def record_job (job, result):
+			collect_job (job, result)
+			yield job, result, complete (job)
+	def collect_job (job, result):
 		for i, jobs in enumerate (it .jobs):
 			if job in jobs:
 				it .jobs [i] [job] = result
@@ -90,7 +122,7 @@ def pool (parallelism, args, tmp_dir = '/dev/shm/', log_file = '/dev/null'):
 		else:
 			panic ('mysterious job ' + str (job))
 				
-	it .assign_work = assign_work
+	it .broadcast_work = broadcast_work
 	it .put_work = put_work
 	it .get_work = get_work
 	return it

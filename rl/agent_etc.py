@@ -27,9 +27,7 @@ def load_agent (params):
 		panic ('unrecognized agent kind: ' + str (agent_params ['agent']))
 def save_agent (agent):
 	return (
-	{ 'agent': 
-		{ ** agent .params
-		, 'state': { layer: parameter for layer, parameter in agent .state_dict () .items () if not 'vae' in layer } }
+	{ ** save_agent_only (agent)
 	, ** save_model (agent .vae) })
 def save_agent_only (agent):
 	return (

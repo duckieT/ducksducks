@@ -1,3 +1,4 @@
+import os
 import torch
 from task_etc import *
 from __.utils import *
@@ -9,6 +10,7 @@ def params ():
 	parser .add_argument ('--task', type = str, default = 'evolve', metavar = 'x', help = 'kind of rl task (' + ', ' .join (tasks)+ ')')
 
 	parser .add_argument ('--out', type = str, metavar = 'path', help = 'path to a folder to store output')
+	parser .add_argument ('--log-file', type = str, metavar = 'path', help = 'path to a file to store log info')
 
 	parser .add_argument ('--map', type = str, default = map_name, metavar = 'map', help = 'name of duckie map (default: ' + map_name + ')')
 	parser .add_argument ('--frame-skip', type = int, default = frame_skip, metavar = 'n', help = 'frames to skip per step (default: ' + str (frame_skip) + ')')
@@ -39,19 +41,12 @@ def params ():
 			, 'log_interval': args .log_interval
 			, 'seed': args .seed
 			, 'cuda_ok': not args .no_cuda and torch .cuda. is_available () } })
-	if args .task == 'experience':
-		return (
-		{ 'task': 
-			{ 'task': 'experience'
-			, 'map_name': args .map
-			, 'frame_skip': args .frame_skip
-			, 'distortion': args .distortion
-			, 'cuda_ok': not args .no_cuda and torch .cuda. is_available () } })
-	if args .task == 'sample':
+	elif args .task == 'sample':
 		return (
 		{ 'task': 
 			{ 'task': 'sample'
 			, 'map_name': args .map
+			, 'log_file': args .log_file
 			, 'frame_skip': args .frame_skip
 			, 'distortion': args .distortion
 			, 'cuda_ok': not args .no_cuda and torch .cuda. is_available () } })

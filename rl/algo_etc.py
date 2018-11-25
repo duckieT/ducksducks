@@ -8,9 +8,11 @@ from __.utils import *
 
 algos = ['ga']
 algo = 'ga'
-elite_proportion = 0.1
+elite_proportion = 0.01
+elite_overselection = 3
+elite_trials = 10
 mutation_sd = 1
-population_size = 50
+population_size = 1000
 	
 def load_algo (params):
 	algo_params = params ['algo']
@@ -33,12 +35,15 @@ def init_ga (origination, culture, discrimination, reproduction, ** kwargs):
 	cultivate = (
 		hedonistic_culture if culture [0] == 'reward' else
 		panic ('unrecognized culture kind: ' + str (culture [0])))
-	elite_selection = (
-		proportional_selection (discrimination [1]) if discrimination [0] == 'proportion' else
+
+	elite_proportion, elite_overselection, elite_trials = (
+		discrimination [1], 1, 1 if discrimination [0] == 'proportion' else
+		discrimination [1:] if discrimination [0] == 'overproportion' else
 		panic ('unrecognized discrimination kind: ' + str (discrimination [0])))
-	repopulate = (
-		naive_mutation_population (reproduction [1], reproduction [2]) if reproduction [0] == 'mutation-only' else
+	mutation_sd, population_size = (
+		reproduction [1:] if reproduction [0] == 'mutation-only' else
 		panic ('unrecognized reproduction kind: ' + str (reproduction [0])))
+	repopulate = naive_mutation_population (mutation_sd, population_size)
 
 	ga = thing ()
 	ga .params = (
@@ -51,67 +56,54 @@ def init_ga (origination, culture, discrimination, reproduction, ** kwargs):
 	def evolve (population, habitat, adam = None):
 		yield 'generation', None
 		if population is None:
-			yield 'origination', None
+			yield 'origination', population_size
 			population = aborigination (adam)
 			yield 'originated', population
 		else:
-			yield 'reproduce', None
+			yield 'reproduce', population_size
 			population = repopulate (population)
 			yield 'reproduced', population
-		yield 'cultivate', None
 		survivors = cultivate (habitat, population)
-		yield 'cultivated', survivors
-		yield 'discriminate', None
-		elites = yield from elite_selection (survivors, population)
-		yield 'discriminated', elites
+		tentative_elites = yield from fixed_selection (elite_proportion * elite_overselection * population_size) (survivors)
+		surviving_elites = cultivate (habitat, tentative_elites, elite_trials)
+		elites = yield from fixed_selection (elite_proportion * population_size) (surviving_elites)
 		return elites
 	ga .next_generation = evolve
 	return ga
 
 def random_sampling (number, sd):
 	def genesis (agent):
+		agent .cpu ()
+		# save my cuda memory
 		parameters_origin = { i: torch .zeros (parameter .size ()) for i, parameter in agent .state_dict () .items () }
 		agent .load_state_dict (parameters_origin)
 		adam = bloodline (agent)
 
 		random = naive_mutation (sd)
 
-		return [ random (adam) for _ in range (number) ]
+		return ( random (adam) for _ in range (number) )
 	return genesis
 
-def hedonistic_culture (habitat, population):
+def hedonistic_culture (habitat, population, trials = 1):
 	contributions = []
 	for individual in population:
-		life = yield_ (habitat .eval (individual))
-		for moment in life: pass
-		contributions += [ (life .value, individual) ]
-	def hedonistic_life (value, individual):
-		reward = yield_ (value)
-		for moment in reward: pass
-		individual .fitness = reward .value
+		values = []
+		for i in range (trials):
+			life = yield_ (habitat .tryout (individual))
+			for moment in life: pass
+			values += [ life .value ]
+		contributions += [ (values, individual) ]
+	def hedonistic_life (values, individual):
+		rewards = ( yield_ (value) for value in values )
+		for reward in rewards:
+			for moment in reward: pass
+		individual .fitness = sum ([ reward .value for reward in rewards ]) / trials
 		return individual
-	return (hedonistic_life (value, individual) for value, individual in contributions)
+	return (hedonistic_life (values, individual) for values, individual in contributions)
 
-def proportional_selection (proportion):
-	def elites (survivors, population):
-		import math
-
-		elites_size = math .ceil (proportion * len (population))
+def fixed_selection (elites_size):
+	def elites (survivors):
 		elites = []
-		def rank (elites, individual):
-			if len (elites) == 0:
-				return 0
-			elif len (elites) == 1:
-				if elites [0] .fitness < individual .fitness:
-					return 0
-				else:
-					return 1
-			else:
-				median = len (elites) // 2
-				if elites [median] .fitness < individual .fitness:
-					return rank (elites [:median], individual)
-				else:
-					return median + rank (elites [median:], individual)
 		for individual in survivors:
 			individual_index = rank (elites, individual)
 			if individual_index < elites_size:
@@ -120,15 +112,30 @@ def proportional_selection (proportion):
 		yield 'discriminated', elites
 		return elites
 	return elites
-	
+def rank (elites, individual):
+	if len (elites) == 0:
+		return 0
+	elif len (elites) == 1:
+		if elites [0] .fitness < individual .fitness:
+			return 0
+		else:
+			return 1
+	else:
+		median = len (elites) // 2
+		if elites [median] .fitness < individual .fitness:
+			return rank (elites [:median], individual)
+		else:
+			return median + rank (elites [median:], individual)
+
 def naive_mutation_population (mutation_sd, population_size):
 	mutate = naive_mutation (mutation_sd) 
 	def next_gen (elites):
 		import random
+		from itertools import chain
 
 		children_room = population_size - len (elites)
-		children = [ mutate (elites [i]) for i in random .choices (range (len (elites)), k = children_room) ]
-		return elites + children
+		children = ( mutate (elites [i]) for i in random .choices (range (len (elites)), k = children_room) )
+		return chain (iter (elites), children)
 		
 	return next_gen
 
@@ -139,11 +146,10 @@ def live (env, individual):
 	try:
 		alive = True
 		observation = env .reset ()
-		observation = torch .from_numpy (observation) .to (dtype = torch.float32) .permute (2, 0, 1)
 		while alive:
+			observation = torch .from_numpy (observation) .to (dtype = torch.float32) .permute (2, 0, 1)
 			action = life .choice (observation)
 			observation, reward, dead, info = env .step (action)
-			observation = torch .from_numpy (observation) .to (dtype = torch.float32) .permute (2, 0, 1)
 			yield 'step', (observation, reward, dead, info)
 			total_reward += reward
 			alive = not dead
@@ -151,6 +157,8 @@ def live (env, individual):
 		life .crashed = False
 	except:
 		import traceback
+		just_say ('crashed!') 
+		print (observation, reward, dead, info)
 		just_say (traceback.format_exc()) 
 		life .killed = True
 		life .crashed = True
