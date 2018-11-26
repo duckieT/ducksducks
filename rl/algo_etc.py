@@ -161,13 +161,29 @@ def naive_mutation_population (mutation_sd, population_size):
 	return next_gen
 
 def lane_judge (action, observation, reward, dead, info, env):
+	if not hasattr (env, 'pos_history'):
+		env .pos_history = []
+
 	forward, turn = action
 	velocity_reward = max (0, forward * 0.5) - 0.5
+
+	step_size = 0.04
+	cur_pos = tuple (env .cur_pos)
+	x, y, z = cur_pos
+	gamma = 1 - step_size
+	idle_penalty = sum (
+		[ (gamma ** i)
+		* (- step_size 
+			if (x - x_) ** 2 + (y - y_) ** 2 + (z - z_) ** 2 < step_size ** 2 else 0)
+		for i, (x_, y_, z_) in enumerate (env .pos_history) ] )
+
 	if not dead:
-		return reward + velocity_reward
+		env .pos_history = [ cur_pos ] + env .pos_history
+		return reward + velocity_reward + idle_penalty
 	else:
 		longetivity_reward = env .step_count
-		return reward + velocity_reward + longetivity_reward
+		env .pos_history = []
+		return reward + velocity_reward + idle_penalty + longetivity_reward
 
 def live (env, individual, judge = lane_judge):
 	life = individual .reincarnate ()
