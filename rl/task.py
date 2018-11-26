@@ -15,6 +15,7 @@ def params ():
 	parser .add_argument ('--map', type = str, default = map_name, metavar = 'map', help = 'name of duckie map (default: ' + map_name + ')')
 	parser .add_argument ('--frame-skip', type = int, default = frame_skip, metavar = 'n', help = 'frames to skip per step (default: ' + str (frame_skip) + ')')
 	parser .add_argument ('--distortion', type = bool, default = distortion, metavar = 'x', help = 'whether to fisheye the camera (default: ' + str (distortion) + ')')
+	parser .add_argument ('--max-steps', type = int, default = max_steps, metavar = 'n', help = 'max steps per episode (default: ' + str (max_steps) + ')')
 
 	parser .add_argument ('--iteration-offset', type = int, default = iteration_offset, metavar = 'n', help = 'number of iterations to skip (default: ' + str (iteration_offset) + ')')
 	parser .add_argument ('--iterations', type = int, default = iterations, metavar = 'n', help = 'number of iterations to train (default: ' + str (iterations) + ')')
@@ -35,6 +36,7 @@ def params ():
 			, 'out_path': args .out
 			, 'frame_skip': args .frame_skip
 			, 'distortion': args .distortion
+			, 'max_steps': args .max_steps
 			, 'iteration_offset': args .iteration_offset
 			, 'iterations': args .iterations
 			, 'parallelism': args .parallelism
@@ -49,6 +51,20 @@ def params ():
 			, 'log_file': args .log_file
 			, 'frame_skip': args .frame_skip
 			, 'distortion': args .distortion
+			, 'max_steps': args .max_steps
+			, 'cuda_ok': not args .no_cuda and torch .cuda. is_available () } })
+	elif args .task == 'visualize':
+		return (
+		{ 'task': 
+			{ 'task': 'visualize'
+			, 'map_name': args .map
+			, 'out_path': args .out
+			, 'frame_skip': args .frame_skip
+			, 'distortion': args .distortion
+			, 'max_steps': args .max_steps
+			, 'iteration_offset': args .iteration_offset
+			, 'parallelism': args .parallelism
+			, 'seed': args .seed
 			, 'cuda_ok': not args .no_cuda and torch .cuda. is_available () } })
 	else:
 		panic ('unknown task ' + str (args .task))

@@ -16,6 +16,8 @@ def tmp (for_what = None):
 		return tmp ()
 	else:
 		return tmp_path
+def special_tmp (special):
+	return os .path .join (tmp_dir, 'pool-' + special)
 def package (goods = None, ** kwargs):
 	num_of_goods = ( 0 if goods is None else 1 ) + len (kwargs)
 	if num_of_goods != 1:
@@ -53,7 +55,8 @@ def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
 		it .jobs += [{}]
 
 	def clean_pool ():
-		os .killpg (0, SIGKILL)
+		import signal
+		os .killpg (0, signal .SIGKILL)
 	atexit .register (clean_pool)
 		
 	def running_jobs ():
@@ -65,6 +68,24 @@ def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
 				return i
 		else:
 			return 0
+	
+	def reset ():
+		import psutil
+		import time
+		if sum ([ len (job) for job in it .jobs ]) == 0:
+			pids = psutil .Process () .children (recursive = True)
+			for pid in pids:
+				os .kill (pid .pid, signal)
+			for i in range (parallelism):
+				send = it .send [i]
+				if i in it .send_fds:
+					it .send_fds [i] .close ()
+				it .send_fds = {}
+				it .send_fps = {}
+				os .remove (send), os .mkfifo (send)
+				bash (command + ' <"' + send + '" >>"' + rcv + '" &')
+		else:
+			panic ('jay doesnt care yet')
 		
 	def assign_work (n, job, * order):
 		if job != 'just':
@@ -126,6 +147,8 @@ def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
 		else:
 			panic ('mysterious job ' + str (job))
 				
+	it .reset = reset
+
 	it .broadcast_work = broadcast_work
 	it .put_work = put_work
 	it .get_work = get_work

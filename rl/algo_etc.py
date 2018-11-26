@@ -8,11 +8,11 @@ from __.utils import *
 
 algos = ['ga']
 algo = 'ga'
-elite_proportion = 0.01
+elite_proportion = 0.05
 elite_overselection = 3
-elite_trials = 10
+elite_trials = 4
 mutation_sd = 1
-population_size = 1000
+population_size = 300
 batch_size = 100
 	
 def load_algo (params):
@@ -29,7 +29,7 @@ def save_algo (algo):
 	else:
 		panic ('unrecognized algo kind: ' + str (algo .params ['algo']))
 
-def ga_algo (origination, culture, discrimination, reproduction, batch_size = 1, ** kwargs):
+def ga_algo (origination, culture, discrimination, reproduction, batch_size = 100000, ** kwargs):
 	aborigination = (
 		random_sampling (origination [1], origination [2]) if origination [0] == 'random' else
 		panic ('unrecognized origination kind: ' + str (origination [0])) )
@@ -38,7 +38,7 @@ def ga_algo (origination, culture, discrimination, reproduction, batch_size = 1,
 		panic ('unrecognized culture kind: ' + str (culture [0])) )
 
 	elite_proportion, elite_overselection, elite_trials = (
-		discrimination [1], 1, 1 if discrimination [0] == 'proportion' else
+		(discrimination [1], 1, 1) if discrimination [0] == 'proportion' else
 		discrimination [1:] if discrimination [0] == 'overproportion' else
 		panic ('unrecognized discrimination kind: ' + str (discrimination [0])) )
 	mutation_sd, population_size = (
@@ -52,7 +52,8 @@ def ga_algo (origination, culture, discrimination, reproduction, batch_size = 1,
 		, 'origination': origination
 		, 'culture': culture
 		, 'discrimination': discrimination
-		, 'reproduction': reproduction })
+		, 'reproduction': reproduction
+		, 'batch_size': batch_size })
 
 	def evolve (population, habitat, adam = None):
 		yield 'generation', None
@@ -91,7 +92,9 @@ def hedonistic_culture (habitat, population, trials = 1, batch_size = 1):
 		iterator = iter (iterable)
 		for first in iterator:
 			just_say ('chunking one batch')
-			yield chain ([first], islice (iterator, size - 1))
+			yield chain ([first], islice (iterator, (size - 1) // trials))
+			if hasattr (habitat, 'reset'):
+				habitat .reset ()
 	def contributed_individual (individual):
 		contributions = []
 		for i in range (trials):
@@ -117,6 +120,8 @@ def hedonistic_culture (habitat, population, trials = 1, batch_size = 1):
 	return (individual for batch in chunks (population, batch_size) for individual in cultured_batch (contribued_batch (batch)))
 
 def fixed_selection (elites_size):
+	import math
+	elites_size = math .ceil (elites_size)
 	def elites (survivors):
 		elites = []
 		for individual in survivors:
@@ -155,7 +160,16 @@ def naive_mutation_population (mutation_sd, population_size):
 		
 	return next_gen
 
-def live (env, individual):
+def lane_judge (action, observation, reward, dead, info, env):
+	forward, turn = action
+	velocity_reward = max (0, forward * 0.5) - 0.5
+	if not dead:
+		return reward + velocity_reward
+	else:
+		longetivity_reward = env .step_count
+		return reward + velocity_reward + longetivity_reward
+
+def live (env, individual, judge = lane_judge):
 	life = individual .reincarnate ()
 	total_reward = 0
 
@@ -167,10 +181,15 @@ def live (env, individual):
 			action = life .choice (observation)
 			observation, reward, dead, info = env .step (action)
 			yield 'step', (observation, reward, dead, info)
-			total_reward += reward
+			total_reward += judge (action, observation, reward, dead, info, env)
 			alive = not dead
 		life .killed = (reward != 0)
 		life .crashed = False
+	except AssertionError:
+		import sys
+		print ('unluck!', file = sys .stderr) 
+		yield 'crash reset', None
+		total_reward = yield from live (env, individual)
 	except:
 		import sys
 		import traceback
@@ -200,6 +219,7 @@ def naive_mutation (mutation_sd):
 	return mutate
 
 def bloodline (genotype):
+	genotype .eval ()
 	device = next (genotype .parameters ()) .device
 	def reincarnate ():
 		import copy
@@ -208,7 +228,7 @@ def bloodline (genotype):
 		def choice (observation):
 			with torch .no_grad ():
 				life .instinct .sense (observation .to (device))
-				return life .instinct (life .instinct .recognition ())
+				return tuple (life .instinct (life .instinct .recognition ()) .numpy ())
 		life .instinct = copy .deepcopy (genotype)
 		life .instinct .vae = genotype .vae
 		life .instinct .eval ()
