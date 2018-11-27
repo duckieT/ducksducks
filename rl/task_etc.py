@@ -6,7 +6,7 @@ from algo_etc import *
 from __.utils import *
 
 # hyperparameters
-tasks = ['evolve', 'sample']
+tasks = ['evolve', 'sample', 'visualize']
 task = 'evolve'
 map_name = 'loop_pedestrians'
 frame_skip = 3
@@ -114,9 +114,9 @@ def evolve_task (map_name, out_path, parallelism, iteration_offset, iterations, 
 			task .iteration_offset = iteration + 1
 			torch .save (save_task (task), file ('task_' + str (iteration + 1) + '.pt'))
 			torch .save (save_population (elites), file ('elites_' + str (iteration + 1) + '.pt'))
-			for moment in yield_ (sample_visualization (elites [0], habitat, file ('sample_' + str (iteration + 1) + '_champion.mp4'))): pass
-			for moment in yield_ (sample_visualization (elites [1], habitat, file ('sample_' + str (iteration + 1) + '_first-runner.mp4'))): pass
-			for moment in yield_ (sample_visualization (elites [2], habitat, file ('sample_' + str (iteration + 1) + '_second-runner.mp4'))): pass
+			for moment in yield_ (sample_visualization (elites [0], habitat, file ('sample_champion_' + str (iteration + 1) + '.mp4'))): pass
+			for moment in yield_ (sample_visualization (elites [1], habitat, file ('sample_first-runner_' + str (iteration + 1) + '.mp4'))): pass
+			for moment in yield_ (sample_visualization (elites [2], habitat, file ('sample_second-runner_' + str (iteration + 1) + '.mp4'))): pass
 	task .go = go_evolve
 
 	def file (filename):
@@ -208,9 +208,9 @@ def visualize_task (map_name, out_path, parallelism, iteration_offset, cuda_ok, 
 		population = elites = task .population
 		iteration = iteration_offset
 
-		for moment in yield_ (sample_visualization (elites [0], habitat, file ('sample_' + str (iteration + 1) + '_champion.mp4'))): pass
-		for moment in yield_ (sample_visualization (elites [1], habitat, file ('sample_' + str (iteration + 1) + '_first-runner.mp4'))): pass
-		for moment in yield_ (sample_visualization (elites [2], habitat, file ('sample_' + str (iteration + 1) + '_second-runner.mp4'))): pass
+		for moment in yield_ (sample_visualization (elites [0], habitat, file ('sample_champion_' + str (iteration + 1) + '.mp4'))): pass
+		for moment in yield_ (sample_visualization (elites [1], habitat, file ('sample_first-runner_' + str (iteration + 1) + '.mp4'))): pass
+		for moment in yield_ (sample_visualization (elites [2], habitat, file ('sample_second-runner_' + str (iteration + 1) + '.mp4'))): pass
 	task .go = go_visualize
 
 	def file (filename):

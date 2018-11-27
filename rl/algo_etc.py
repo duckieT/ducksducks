@@ -9,11 +9,11 @@ from __.utils import *
 algos = ['ga']
 algo = 'ga'
 elite_proportion = 0.05
-elite_overselection = 3
+elite_overselection = 2
 elite_trials = 4
 mutation_sd = 1
 population_size = 300
-batch_size = 100
+batch_size = 50
 	
 def load_algo (params):
 	algo_params = params ['algo']
@@ -164,26 +164,31 @@ def lane_judge (action, observation, reward, dead, info, env):
 	if not hasattr (env, 'pos_history'):
 		env .pos_history = []
 
+	position_reward = reward
+
 	forward, turn = action
-	velocity_reward = max (0, forward * 0.5) - 0.5
+	velocity_reward = max (0, forward * 2)
+
+	rotation_penalty = - abs (turn) * 0.2
 
 	step_size = 0.04
 	cur_pos = tuple (env .cur_pos)
 	x, y, z = cur_pos
 	gamma = 1 - step_size
-	idle_penalty = sum (
+	idle_penalty = - 10 * sum (
 		[ (gamma ** i)
-		* (- step_size 
-			if (x - x_) ** 2 + (y - y_) ** 2 + (z - z_) ** 2 < step_size ** 2 else 0)
+		* (step_size
+			if (x - x_) ** 2 + (y - y_) ** 2 + (z - z_) ** 2 < (step_size * (i + 1) * 0.6) ** 2 else
+			0)
 		for i, (x_, y_, z_) in enumerate (env .pos_history) ] )
 
 	if not dead:
 		env .pos_history = [ cur_pos ] + env .pos_history
-		return reward + velocity_reward + idle_penalty
+		return position_reward + velocity_reward + rotation_penalty + idle_penalty
 	else:
-		longetivity_reward = env .step_count
+		# longetivity_reward = env .step_count
 		env .pos_history = []
-		return reward + velocity_reward + idle_penalty + longetivity_reward
+		return position_reward + velocity_reward + rotation_penalty + idle_penalty # + longetivity_reward
 
 def live (env, individual, judge = lane_judge):
 	life = individual .reincarnate ()

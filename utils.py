@@ -1,4 +1,5 @@
 import os
+import random
 import atexit
 
 def bash (cmd):
@@ -6,18 +7,22 @@ def bash (cmd):
 	return os .system ('bash -c \'' + escaped_cmd + '\'')
 
 tmp_dir = '/dev/shm/'
+tmp_prefix = os .path .join (tmp_dir, 'pool_' + str (random .getrandbits (32)) + '-')
+while os .path .exists (tmp_prefix):
+	tmp_prefix = os .path .join (tmp_dir, 'pool_' + str (random .getrandbits (32)) + '-')
+os .mknod (tmp_prefix)
+
 def tmp (for_what = None):
-	import random
 	marking = (
 		for_what + '-' if not for_what is None else
 		'' )
-	tmp_path = os .path .join (tmp_dir, 'pool-' + marking + str (random .getrandbits (32)))
+	tmp_path = tmp_prefix + marking + str (random .getrandbits (32))
 	if os .path .exists (tmp_path):
 		return tmp ()
 	else:
 		return tmp_path
 def special_tmp (special):
-	return os .path .join (tmp_dir, 'pool-' + special)
+	return tmp_prefix + special
 def package (goods = None, ** kwargs):
 	num_of_goods = ( 0 if goods is None else 1 ) + len (kwargs)
 	if num_of_goods != 1:
@@ -31,7 +36,7 @@ def package (goods = None, ** kwargs):
 	os .makedirs (package), os .rmdir (package), torch .save (goods, package)
 	return package
 def clean_tmp ():
-	bash ('rm "' + tmp_dir + 'pool-*" 2>/dev/null')
+	bash ('rm "' + tmp_prefix + '*" 2>/dev/null')
 atexit .register (clean_tmp)
 
 def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
@@ -55,8 +60,10 @@ def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
 		it .jobs += [{}]
 
 	def clean_pool ():
-		import signal
-		os .killpg (0, signal .SIGKILL)
+		import psutil
+		pids = psutil .Process () .children (recursive = True)
+		for pid in pids:
+			os .kill (pid .pid, signal)
 	atexit .register (clean_pool)
 		
 	def running_jobs ():
