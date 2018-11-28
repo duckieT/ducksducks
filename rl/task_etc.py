@@ -171,8 +171,8 @@ def sample_task (map_name, frame_skip, distortion, max_steps, cuda_ok, log_file,
 					line = job + ':' + str (contribution .value)
 					lock = open (special_tmp ('lock'), 'w')
 					fcntl .lockf (lock, fcntl .LOCK_EX)
-					print ('sending\t' + line, file = open (log_file, 'a'))
-					print (line)
+					print ('sending\t' + line, file = open (log_file, 'a'), flush = True)
+					print (line, flush = True)
 					lock .close ()
 	task .go = go_sample
 	return task

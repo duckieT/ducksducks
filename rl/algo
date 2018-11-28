@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec python "$(pwd)/algo.py" $@
+exec python "$(dirname "$0")/algo.py" $@

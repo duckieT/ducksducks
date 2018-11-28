@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec python "$(pwd)/task.py" $@
+exec python "$(dirname "$0")/task.py" $@

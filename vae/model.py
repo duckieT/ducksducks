@@ -12,6 +12,8 @@ def params ():
 	parser .add_argument ('--encoding-dim', type = int, default = None, metavar = 'd', help = 'number of encoding dimensions (default: ' + str (encoding_dimensions) + ')')
 	parser .add_argument ('--activation', type = str, default = None, choices = ['relu', 'leaky_relu', 'selu'], metavar = 'a', help = 'activation function in the hidden layers (default: ' + activation + ')')
 
+	parser .add_argument ('--scale', type = int, default = None, metavar = 's', help = 'factor to downsample the image (default: ' + str (scale) + ')')
+
 	args = parser .parse_args ()
 
 	if args .model == 'naive':
@@ -36,6 +38,11 @@ def params ():
 		{ 'model': 
 			{ 'model': 'snconv3'
 			, 'encoding_dimensions': if_none (encoding_dimensions, args .encoding_dim) } })
+	elif args .model == 'downsample':
+		return (
+		{ 'model': 
+			{ 'model': 'downsample'
+			, 'scale': if_none (scale, args .scale) } })
 	else:
 		raise Exception ('unknown model', args .model)
 

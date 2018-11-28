@@ -8,7 +8,7 @@ def params ():
 	
 	parser .add_argument ('--task', type = str, default = 'instruct', metavar = 'm', help = 'kind of vae task (' + ', ' .join (tasks)+ ')')
 
-	parser .add_argument ('--train', type = str, required = True, metavar = 'path', help = 'path to a folder containing training images for the vae')
+	parser .add_argument ('--train', type = str, metavar = 'path', help = 'path to a folder containing training images for the vae')
 	parser .add_argument ('--test', type = str, required = True, metavar = 'path', help = 'path to a folder containing test images for the vae')
 	parser .add_argument ('--out', type = str, required = True, metavar = 'path', help = 'path to a folder to store output')
 
@@ -36,6 +36,15 @@ def params ():
 			, 'epoch_offset': args .epoch_offset
 			, 'epochs': args .epochs
 			, 'log_interval': args .log_interval
+			, 'cuda_ok': not args .no_cuda and torch .cuda. is_available ()
+			, 'seed': args .seed } })
+	elif args .task == 'visualize':
+		return (
+		{ 'task': 
+			{ 'task': 'visualize'
+			, 'test_path': args .test
+			, 'out_path': args .out
+			, 'epoch_offset': args .epoch_offset
 			, 'cuda_ok': not args .no_cuda and torch .cuda. is_available ()
 			, 'seed': args .seed } })
 	else:

@@ -7,6 +7,7 @@ def bash (cmd):
 	return os .system ('bash -c \'' + escaped_cmd + '\'')
 
 tmp_dir = '/dev/shm/'
+static_tmp_prefix = os .path .join (tmp_dir, 'pool-')
 tmp_prefix = os .path .join (tmp_dir, 'pool_' + str (random .getrandbits (32)) + '-')
 while os .path .exists (tmp_prefix):
 	tmp_prefix = os .path .join (tmp_dir, 'pool_' + str (random .getrandbits (32)) + '-')
@@ -22,7 +23,7 @@ def tmp (for_what = None):
 	else:
 		return tmp_path
 def special_tmp (special):
-	return tmp_prefix + special
+	return static_tmp_prefix + special
 def package (goods = None, ** kwargs):
 	num_of_goods = ( 0 if goods is None else 1 ) + len (kwargs)
 	if num_of_goods != 1:
@@ -48,12 +49,12 @@ def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
 	it .send_fds = {}
 	it .jobs = []
 
-	rcv = tmp ()
+	rcv = tmp ('rcv')
 	os .makedirs (rcv), os .rmdir (rcv), os .mkfifo (rcv)
 	it .rcv = rcv
 
 	for i in range (parallelism):
-		send = tmp ()
+		send = tmp ('send')
 		os .makedirs (send), os .rmdir (send), os .mkfifo (send)
 		it .send += [send]
 		bash (command + ' <"' + send + '" >>"' + rcv + '" &')
@@ -95,11 +96,16 @@ def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
 			panic ('jay doesnt care yet')
 		
 	def assign_work (n, job, * order):
+		import time
 		if job != 'just':
 			it .jobs [n] = { ** it .jobs [n], job: None }
 		# what if job already exists?
-		if not n in it .send_fps:
-			it .send_fps [n] = os .open (it .send [n], os .O_WRONLY | os .O_NONBLOCK)
+		while not n in it .send_fps:
+			try:
+				it .send_fps [n] = os .open (it .send [n], os .O_WRONLY | os .O_NONBLOCK)
+			except OSError:
+				just_say ('waiting for worker ' + str (n) + ' to open pipe...')
+				time .sleep (1)
 		if not n in it .send_fds:
 			it .send_fds [n] = os .fdopen (it .send_fps [n], 'w', 1)
 		line = ':' .join ([job, * order ])

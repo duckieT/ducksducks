@@ -1,4 +1,5 @@
 import torch
+import torchvision
 import numpy as np
 from torch import nn
 from torch .nn import functional as F
@@ -10,10 +11,12 @@ image_channels = 3
 
 image_dimensions = image_channels * image_size [0] * image_size [1]
 
-models = ['naive', 'snconv', 'snconv2', 'snconv3']
+models = ['naive', 'snconv', 'snconv2', 'snconv3', 'downsample']
 feature_dimensions = 1000
 encoding_dimensions = 40
 activation = 'selu'
+
+scale = 16
 	
 def load_model (params):
 	model_params = params ['model']
@@ -25,6 +28,8 @@ def load_model (params):
 		return snconv2_vae (** model_params)
 	elif model_params ['model'] == 'snconv3':
 		return snconv3_vae (** model_params)
+	elif model_params ['model'] == 'downsample':
+		return downsample_encoder (** model_params)
 	else:
 		panic ('unrecognized model kind: ' + str (model_params ['model']))
 def save_model (model):
@@ -238,3 +243,43 @@ class snconv3_vae (nn .Module):
 def output_size (input_size, model):
 	x = torch .randn (input_size) .unsqueeze (0)
 	return model (x) .size () [1:]
+
+class downsample_encoder (nn .Module):
+	def __init__ (self, scale, ** kwargs):
+		super () .__init__ ()
+
+		encoding_dimensions = (image_size [1] // scale) * (image_size [0] // scale)
+
+		self .params = (
+			{ 'model': 'downsample'
+			, 'scale': scale
+			, 'encoding_dimensions': encoding_dimensions })
+
+	def encode (self, x):
+		scale = self .params ['scale']
+		device = x .device
+		downsamplings = []
+		for i in range (x .size () [0]):
+			downsampling = torchvision .transforms .functional .to_pil_image (x [i] .cpu ())
+			downsampling = torchvision .transforms .functional .to_grayscale (downsampling)
+			downsampling = torchvision .transforms .functional .to_tensor (downsampling)
+			downsampling = F .avg_pool2d (downsampling, scale, scale)
+			downsamplings += [ downsampling ]
+		downsamplings = torch .stack (downsamplings)
+		return downsamplings .to (device), torch .zeros (* downsamplings .size ()) .to (device)
+
+	def reparameterize (self, mu, logvar):
+		std = torch .exp (0.5 * logvar)
+		eps = torch .randn_like (std)
+		return eps .mul (std) .add_ (mu)
+
+	def decode (self, z):
+		scale = self .params ['scale']
+		z = z .reshape (-1, 1, image_size [1] // scale, image_size [0] // scale)
+		upsampling = F .interpolate (z, (image_size [1], image_size [0]))
+		return torch .cat ([ upsampling, upsampling, upsampling ], dim = 1)
+
+	def forward (self, x):
+		mu, logvar = self .encode (x)
+		z = mu
+		return self .decode (z), mu, logvar

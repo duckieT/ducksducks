@@ -10,7 +10,6 @@ from __.utils import *
 agents = ['ltd', 'memory_ltd']
 agent = 'ltd'
 memory_size = 5
-encoding_dimensions = 200
 feature_dimensions = (20, 20, 10, 10)
 activations = ['relu', 'leaky_relu', 'selu']
 activation = 'relu'
@@ -45,11 +44,10 @@ def save_agent_only (agent):
 		, 'state': { layer: parameter for layer, parameter in agent .state_dict () .items () if not 'vae' in layer } } })
 
 class ltd (nn .Module):
-	def __init__ (self, encoding_dimensions, activation, action_size, model, state = None, ** kwargs):
+	def __init__ (self, activation, action_size, model, state = None, ** kwargs):
 		super () .__init__ ()
 		self .params = (
 			{ 'agent': 'ltd'
-			, 'encoding_dimensions': encoding_dimensions
 			, 'activation': activation
 			, 'action_size': action_size })
 
@@ -59,7 +57,7 @@ class ltd (nn .Module):
 
 		self .vae = model
 		self .policy = nn .Sequential ( *
-			[ nn .Linear (encoding_dimensions, 8)
+			[ nn .Linear (model .params ['encoding_dimensions'], 8)
 			, nn .Linear (8, action_dimensions)
 			, nn .Tanh () ])
 
@@ -84,25 +82,25 @@ class ltd (nn .Module):
 		return self .policy (recall) .view (* self .action_size)
 
 class memory_ltd (nn .Module):
-	def __init__ (self, memory_size, encoding_dimensions, feature_dimensions, activation, action_size, model, state = None, ** kwargs):
+	def __init__ (self, memory_size, feature_dimensions, activation, action_size, model, state = None, ** kwargs):
 		super () .__init__ ()
 		self .params = (
 			{ 'agent': 'memory_ltd'
 			, 'memory_size': memory_size
 			, 'feature_dimensions': feature_dimensions
-			, 'encoding_dimensions': encoding_dimensions
 			, 'activation': activation
 			, 'action_size': action_size })
 
 		if not isinstance (feature_dimensions, tuple):
 			feature_dimensions = (feature_dimensions,)
 
+		action_dimensions = np .product (action_size)
+		encoding_dimensions = model .params ['encoding_dimensions']
+
 		self .memory_size = memory_size
 		self .encoding_dimensions = encoding_dimensions
 		self .feature_dimensions = feature_dimensions
 		self .action_size = action_size
-
-		action_dimensions = np .product (action_size)
 
 		self .recall = torch .zeros (memory_size, encoding_dimensions)
 

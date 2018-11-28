@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec python "$(pwd)/agent.py" $@
+exec python "$(dirname "$0")/agent.py" $@

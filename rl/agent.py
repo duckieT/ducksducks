@@ -8,7 +8,6 @@ def params ():
 	
 	parser .add_argument ('--agent', type = str, metavar = 'm', help = 'kind of rl agent (' + ', ' .join (agents) + ')')
 
-	parser .add_argument ('--encoding-dim', type = int, metavar = 'd', help = 'number of encoding dimensions (default: ' + str (encoding_dimensions) + ')')
 	parser .add_argument ('--activation', type = str, choices = activations, metavar = 'a', help = 'activation function in the hidden layers (default: ' + activation + ')')
 
 	parser .add_argument ('--memory', type = int, metavar = 'n', help = 'past frames to remember (default: ' + str (memory_size) + ')')
@@ -22,7 +21,6 @@ def params ():
 		return (
 		{ 'agent': 
 			{ 'agent': 'ltd'
-			, 'encoding_dimensions': if_none (encoding_dimensions, args .encoding_dim)
 			, 'activation': if_none (activation, args .activation)
 			, 'action_size': action_size } })
 	elif agent_arg == 'memory_ltd':
@@ -31,7 +29,6 @@ def params ():
 			{ 'agent': 'memory_ltd'
 			, 'memory_size': if_none (memory_size, args .memory)
 			, 'feature_dimensions': if_none (feature_dimensions, args .feature_dim)
-			, 'encoding_dimensions': if_none (encoding_dimensions, args .encoding_dim)
 			, 'activation': if_none (activation, args .activation)
 			, 'action_size': action_size } })
 	else:
