@@ -10,9 +10,8 @@ from __.utils import *
 agents = ['ltd', 'memory_ltd']
 agent = 'ltd'
 memory_size = 5
+observation_size = (3, 120, 160)
 feature_dimensions = (20, 20, 10, 10)
-activations = ['relu', 'leaky_relu', 'selu']
-activation = 'relu'
 action_size = (2,)
 	
 def load_agent (params):
@@ -31,12 +30,16 @@ def load_agent (params):
 			, ** { 'vae.' + layer: parameter for layer, parameter in model .state_dict () .items () } } if 'state' in agent_params else
 			None )
 		return memory_ltd (** { ** agent_params, 'state': state }, model = model)
+	elif agent_params ['agent'] == 'conv_ltd':
+		return conv_ltd (** agent_params)
 	else:
 		panic ('unrecognized agent kind: ' + str (agent_params ['agent']))
 def save_agent (agent):
 	return (
 	{ ** save_agent_only (agent)
-	, ** save_model (agent .vae) })
+	, ** (
+		save_model (agent .vae) if hasattr (agent, 'vae') else
+		{} ) })
 def save_agent_only (agent):
 	return (
 	{ 'agent': 
@@ -48,7 +51,6 @@ class ltd (nn .Module):
 		super () .__init__ ()
 		self .params = (
 			{ 'agent': 'ltd'
-			, 'activation': activation
 			, 'action_size': action_size })
 
 		self .action_size = action_size
@@ -58,17 +60,9 @@ class ltd (nn .Module):
 		self .vae = model
 		self .policy = nn .Sequential ( *
 			[ nn .Linear (model .params ['encoding_dimensions'], 8)
+			, nn .ReLU ()
 			, nn .Linear (8, action_dimensions)
 			, nn .Tanh () ])
-
-		if activation == 'relu':
-			self .activation = F .relu
-		elif activation == 'leaky_relu':
-			self .activation = F .leaky_relu
-		elif activation == 'selu':
-			self .activation = F .selu
-		else:
-			raise Exception ('unknown activation', self .activation)
 
 		if state:
 			self .load_state_dict (state)
@@ -82,13 +76,12 @@ class ltd (nn .Module):
 		return self .policy (recall) .view (* self .action_size)
 
 class memory_ltd (nn .Module):
-	def __init__ (self, memory_size, feature_dimensions, activation, action_size, model, state = None, ** kwargs):
+	def __init__ (self, memory_size, feature_dimensions, action_size, model, state = None, ** kwargs):
 		super () .__init__ ()
 		self .params = (
 			{ 'agent': 'memory_ltd'
 			, 'memory_size': memory_size
 			, 'feature_dimensions': feature_dimensions
-			, 'activation': activation
 			, 'action_size': action_size })
 
 		if not isinstance (feature_dimensions, tuple):
@@ -108,19 +101,13 @@ class memory_ltd (nn .Module):
 		self .policy = nn .Sequential ( *
 			[ nn .Linear (memory_size * encoding_dimensions, feature_dimensions [0])
 			, *
-			[ nn .Linear (feature_dimensions [i], feature_dimensions [i + 1]) 
-				for i in range (len (feature_dimensions) - 1) ]
+			[ layer for i in range (len (feature_dimensions) - 1)
+				for layer in 
+				( nn .ReLU ()
+				, nn .Linear (feature_dimensions [i], feature_dimensions [i + 1]) ) ]
+			, nn .ReLU ()
 			, nn .Linear (feature_dimensions [-1], action_dimensions)
 			, nn .Tanh () ])
-
-		if activation == 'relu':
-			self .activation = F .relu
-		elif activation == 'leaky_relu':
-			self .activation = F .leaky_relu
-		elif activation == 'selu':
-			self .activation = F .selu
-		else:
-			raise Exception ('unknown activation', self .activation)
 
 		if state:
 			self .load_state_dict (state)
@@ -135,4 +122,47 @@ class memory_ltd (nn .Module):
 	def forward (self, recall):
 		return self .policy (recall .view (-1)) .view (* self .action_size)
 
-# add agent with recall
+class conv_ltd (nn .Module):
+	def __init__ (self, observation_size, action_size, state = None, ** kwargs):
+		super () .__init__ ()
+		self .params = (
+			{ 'agent': 'conv_ltd'
+			, 'observation_size': observation_size
+			, 'action_size': action_size })
+
+		self .observation_size = observation_size
+		self .action_size = action_size
+
+		action_dimensions = np .product (action_size)
+
+		self .encoder = nn .Sequential ( *
+			[ nn .Conv2d (image_channels, 4, kernel_size = 3, stride = 2)
+			, nn .ReLU ()
+			, nn .Conv2d (4, 8, kernel_size = 3, stride = 2)
+			, nn .ReLU ()
+			, nn .Conv2d (8, 16, kernel_size = 3, stride = 2)
+			, nn .ReLU ()
+			, nn .Conv2d (16, 32, kernel_size = 3, stride = 2) ])
+
+		encoding_size = output_size (self .encoder, observation_size)
+		encoding_dimensions = np .product (encoding_size)
+
+		self .policy = nn .Sequential ( *
+			[ nn .Linear (encoding_dimensions, 8)
+			, nn .ReLU ()
+			, nn .Linear (8, action_dimensions)
+			, nn .Tanh () ])
+
+		if state:
+			self .load_state_dict (state)
+	def sense (self, observation):
+		encoding = self .encoder (F .avg_pool2d (observation, 4, 4) .unsqueeze (0))
+		self .recall = encoding .view (-1)
+	def recognition (self):
+		return self .recall
+	def forward (self, recall):
+		return self .policy (recall) .view (* self .action_size)
+
+def output_size (model, input_size):
+	x = torch .randn (input_size) .unsqueeze (0)
+	return model (x) .size () [1:]

@@ -11,7 +11,7 @@ algo = 'ga'
 elite_proportion = 0.05
 elite_overselection = 2
 elite_trials = 4
-mutation_sd = 1
+mutation_sd = 10
 population_size = 300
 batch_size = 50
 	
@@ -234,7 +234,7 @@ def naive_mutation (mutation_sd):
 				for i, chromosome in genes .items () })
 		genotype_state .update (mutated_genes)
 		mutated_genotype = copy .deepcopy (genotype)
-		mutated_genotype .vae = genotype .vae
+		if hasattr (genotype, 'vae'): mutated_genotype .vae = genotype .vae
 		mutated_genotype .load_state_dict (genotype_state)
 		return bloodline (mutated_genotype)
 	return mutate
@@ -251,7 +251,7 @@ def bloodline (genotype):
 				life .instinct .sense (observation .to (device))
 				return tuple (life .instinct (life .instinct .recognition ()) .numpy ())
 		life .instinct = copy .deepcopy (genotype)
-		life .instinct .vae = genotype .vae
+		if hasattr (genotype, 'vae'): life .instinct .vae = genotype .vae
 		life .instinct .eval ()
 		life .choice = choice
 		return life

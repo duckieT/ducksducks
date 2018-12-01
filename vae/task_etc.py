@@ -63,13 +63,16 @@ def instruct_task (train_path, test_path, out_path, objective, learning_rate, ba
 		test_sampler = load_samples (test_path, batch_size, cuda_ok = cuda_ok)
 
 		for epoch in range (epoch_offset, epochs):
+			task .epoch_offset = epoch
+
+			i = 0
 			epoch_training_loss = 0
 			epoch_test_loss = 0
-			comparison_visualization, sampling_visualization = None, None
-			for i, (status, progress) in enumerate (instruct (model, objective_fn, task .optimizer, train_sampler, test_sampler, device)):
+			for status, progress in instruct (model, objective_fn, task .optimizer, train_sampler, test_sampler, device):
 				if status == 'train':
 					loss = progress
 					epoch_training_loss += loss
+					i += 1
 					if i % log_interval == 0:
 						print ('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}' .format (epoch + 1, i * batch_size, len (train_sampler .dataset), 100. * i / len (train_sampler), loss / batch_size))
 				elif status == 'trained':
@@ -79,13 +82,14 @@ def instruct_task (train_path, test_path, out_path, objective, learning_rate, ba
 					epoch_test_loss += loss
 				elif status == 'tested':
 					print ('====> Test set loss: {:.4f}' .format (epoch_test_loss / len (test_sampler .dataset)))
-				elif status == 'visualization':
-					comparison_visualization, sampling_visualization = progress
-			task .epoch_offset = epoch + 1
-			write_image (comparison_visualization, file ('comparison_' + str (epoch + 1) + '.png'))
-			write_image (sampling_visualization, file ('sampling_' + str (epoch + 1) + '.png'))
+
 			torch .save (save_task (task), file ('task_' + str (epoch + 1) + '.pt'))
 			torch .save (save_model (model), file ('model_' + str (epoch + 1) + '.pt'))
+
+			image_sample, _ = next (test_sampler)
+			write_image (comparison_visualization (model, image_sample .to (device), visualization_n), file ('comparison_' + str (epoch + 1) + '.png'))
+			encoding_sample = torch .randn (visualization_n ** 2, model .params ['encoding_dimensions'])
+			write_image (sampling_visualization (model, encoding_sample .to (device), visualization_n), file ('sampling_' + str (epoch + 1) + '.png'))
 	task .go = go_instruct
 	return task
 
@@ -196,9 +200,3 @@ def instruct (model, objective, optimizer, train_sampler, test_sampler, device, 
 	for i, (batch_sample, _) in enumerate (test_sampler):
 		yield 'test', test (model, objective, batch_sample .to (device))
 	yield 'tested', None
-
-	_, (image_sample, _) = next (enumerate (test_sampler))
-	encoding_sample = torch .randn (visualization_n ** 2, model .params ['encoding_dimensions'])
-	yield 'visualization', (
-		comparison_visualization (model, image_sample .to (device), visualization_n),
-		sampling_visualization (model, encoding_sample .to (device), visualization_n) )

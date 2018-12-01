@@ -11,11 +11,12 @@ task = 'evolve'
 map_name = 'loop_pedestrians'
 frame_skip = 3
 distortion = True
-max_steps = 500
+max_steps = 1500
 iteration_offset = 0
 iterations = 1000
 parallelism = 2
 log_interval = 10
+batch_size = 50
 
 def load_task (params):
 	task_params = params ['task']
@@ -46,9 +47,12 @@ def load_population (params):
 	population_params = params ['population']
 	return [ bloodline (load_agent ({ ** agent_params, ** params })) for agent_params in population_params ]
 def save_population (population):
+	typical_agent = next (iter (population)) .genotype
 	return (
 	{ 'population': [ save_agent_only (bloodline .genotype) for bloodline in population ]
-	, ** save_model (next (iter (population)) .genotype .vae) })
+	, ** (
+		save_model (typical_agent .vae) if hasattr (typical_agent, 'vae') else
+		{} ) } )
 
 def evolve_task (map_name, out_path, parallelism, iteration_offset, iterations, log_interval, cuda_ok, seed, algo, adam = None, population = None, frame_skip = None, distortion = None, max_steps = None, rng = None, ** kwargs):
 	os .makedirs (out_path, exist_ok = True)
@@ -89,6 +93,8 @@ def evolve_task (map_name, out_path, parallelism, iteration_offset, iterations, 
 		population = elites = task .population
 
 		for iteration in range (iteration_offset, iterations):
+			task .iteration_offset = iteration
+
 			i = 0
 			evolution = yield_ (task .algo .next_generation (population, habitat, adam = adam))
 			# TODO: move models to cuda per batch only
@@ -111,9 +117,10 @@ def evolve_task (map_name, out_path, parallelism, iteration_offset, iterations, 
 			population = elites = evolution .value
 			if i % log_interval != 0:
 				print ('Generation: {} [{}/{} ({:.0f}%)]\tMin: {:.6f}\tMedian: {:.6f}\tMax: {:.6f}\tAverage: {:.6f}' .format (iteration + 1, i, population_size, 100. * i / population_size, elites [-1] .fitness, elites [len (elites) // 2] .fitness, elites [0] .fitness, sum ([ individual .fitness for individual in elites ]) / len (elites)))
-			task .iteration_offset = iteration + 1
+
 			torch .save (save_task (task), file ('task_' + str (iteration + 1) + '.pt'))
 			torch .save (save_population (elites), file ('elites_' + str (iteration + 1) + '.pt'))
+
 			for moment in yield_ (sample_visualization (elites [0], habitat, file ('sample_champion_' + str (iteration + 1) + '.mp4'))): pass
 			for moment in yield_ (sample_visualization (elites [1], habitat, file ('sample_first-runner_' + str (iteration + 1) + '.mp4'))): pass
 			for moment in yield_ (sample_visualization (elites [2], habitat, file ('sample_second-runner_' + str (iteration + 1) + '.mp4'))): pass
@@ -157,7 +164,7 @@ def sample_task (map_name, frame_skip, distortion, max_steps, cuda_ok, log_file,
 					agent_path = rest [0]
 					agent_params = torch .load (agent_path)
 					os .remove (agent_path)
-					genotype = load_agent ({ ** agent_params, ** task .model_params })
+					genotype = load_agent ({ ** agent_params, ** (task .model_params or {}) })
 					individual = bloodline (genotype)
 					life = yield_ (
 						habitat .tryout (individual) if command == 'plain' else
@@ -237,7 +244,6 @@ def env_habitat (map_name, frame_skip = None, distortion = None, max_steps = Non
 				from gym.wrappers.monitoring.video_recorder import VideoRecorder
 				with habitat () as env:
 					if record: recorder = VideoRecorder (env, record)
-					if record: recorder .capture_frame ()
 					yield 'env', env
 					life = yield_ (live (env, individual))
 					for moment in life:
@@ -261,7 +267,8 @@ def pool_habitat (map_name, parallelism, frame_skip = None, distortion = None, m
 
 	def tryout (individual, record = None):
 		if habitat .jobs == habitat .jobs_offset:
-			habitat .pool .broadcast_work ('just', 'model', package (model = save_model (individual .genotype .vae)))
+			if hasattr (individual .genotype, 'vae'):
+				habitat .pool .broadcast_work ('just', 'model', package (model = save_model (individual .genotype .vae)))
 		job = next_job ()
 		if not record:
 			habitat .pool .put_work (job, 'plain', package (agent = save_agent_only (individual .genotype)))
@@ -274,7 +281,6 @@ def pool_habitat (map_name, parallelism, frame_skip = None, distortion = None, m
 		habitat .jobs_offset = habitat .jobs
 	habitat .tryout = tryout
 	habitat .reset = reset
-
 
 	def next_job ():
 		job = 'sample-' + str (habitat .jobs)
