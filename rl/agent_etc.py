@@ -7,7 +7,7 @@ from __.utils import *
 
 # hyperparameters
 
-agents = ['ltd', 'memory_ltd']
+agents = ['ltd', 'memory_ltd', 'conv_ltd']
 agent = 'ltd'
 memory_size = 5
 observation_size = (3, 120, 160)
@@ -16,35 +16,23 @@ action_size = (2,)
 	
 def load_agent (params):
 	agent_params = params ['agent']
-	if agent_params ['agent'] == 'ltd':
-		model = load_model (params)
-		state = (
-			{ ** agent_params ['state']
-			, ** { 'vae.' + layer: parameter for layer, parameter in model .state_dict () .items () } } if 'state' in agent_params else
-			None )
-		return ltd (** { ** agent_params, 'state': state }, model = model)
-	elif agent_params ['agent'] == 'memory_ltd':
-		model = load_model (params)
-		state = (
-			{ ** agent_params ['state']
-			, ** { 'vae.' + layer: parameter for layer, parameter in model .state_dict () .items () } } if 'state' in agent_params else
-			None )
-		return memory_ltd (** { ** agent_params, 'state': state }, model = model)
-	elif agent_params ['agent'] == 'conv_ltd':
+	if agent_params ['agent'] == 'conv_ltd':
 		return conv_ltd (** agent_params)
 	else:
 		panic ('unrecognized agent kind: ' + str (agent_params ['agent']))
 def save_agent (agent):
 	return (
-	{ ** save_agent_only (agent)
-	, ** (
-		save_model (agent .vae) if hasattr (agent, 'vae') else
-		{} ) })
-def save_agent_only (agent):
+	{ ** save_agent_distinct (agent)
+	, ** save_agent_shared (agent) })
+def save_agent_distinct (agent):
 	return (
 	{ 'agent': 
 		{ ** agent .params
-		, 'state': { layer: parameter for layer, parameter in agent .state_dict () .items () if not 'vae' in layer } } })
+		, 'state': { layer: parameter for layer, parameter in agent .state_dict () .items () if not 'shared_' in layer } } })
+def save_agent_shared (agent):
+	return (
+	{ 'agent-shared': 
+		{ 'state': { layer: parameter for layer, parameter in agent .state_dict () .items () if 'shared_' in layer } } })
 
 class ltd (nn .Module):
 	def __init__ (self, activation, action_size, model, state = None, ** kwargs):
@@ -166,3 +154,7 @@ class conv_ltd (nn .Module):
 def output_size (model, input_size):
 	x = torch .randn (input_size) .unsqueeze (0)
 	return model (x) .size () [1:]
+
+def parameter_sensitivities (module):
+	# TODO: replace with actual sensitivity
+	return { layer: torch .ones (parameter .size ()) for layer, parameter in module .named_parameters () }
