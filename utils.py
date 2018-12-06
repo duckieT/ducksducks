@@ -1,23 +1,35 @@
 import os
 import random
-import atexit
+
+def on_killed (fn):
+	import sys
+	import atexit
+	from signal import signal, SIGTERM, SIGINT
+	def do (* args):
+		fn ()
+		sys .exit ()
+	atexit .register (do)
+	signal (SIGTERM, do)
+	signal (SIGINT, do)
 
 def bash (cmd):
 	escaped_cmd = '\'\'\\\'' .join (cmd .split ('\''))
+	just_say (cmd)
 	return os .system ('bash -c \'' + escaped_cmd + '\'')
 
 tmp_dir = '/dev/shm/'
 static_tmp_prefix = os .path .join (tmp_dir, 'pool-')
-tmp_prefix = os .path .join (tmp_dir, 'pool_' + str (random .getrandbits (32)) + '-')
-while os .path .exists (tmp_prefix):
-	tmp_prefix = os .path .join (tmp_dir, 'pool_' + str (random .getrandbits (32)) + '-')
-os .mknod (tmp_prefix)
 
 def tmp (for_what = None):
+	if not hasattr (tmp, 'prefix'):
+		tmp .prefix = os .path .join (tmp_dir, 'pool_' + str (random .getrandbits (32)))
+		while os .path .exists (tmp .prefix):
+			tmp .prefix = os .path .join (tmp_dir, 'pool_' + str (random .getrandbits (32)))
+		os .mknod (tmp .prefix)
 	marking = (
-		for_what + '-' if not for_what is None else
-		'' )
-	tmp_path = tmp_prefix + marking + str (random .getrandbits (32))
+		'-' + for_what + '-' if not for_what is None else
+		'-' )
+	tmp_path = tmp .prefix + marking + str (random .getrandbits (32))
 	if os .path .exists (tmp_path):
 		return tmp ()
 	else:
@@ -34,11 +46,13 @@ def package (goods = None, ** kwargs):
 		tmp (next (iter (kwargs .keys ()))) )
 	if goods is None:
 		goods = next (iter (kwargs .values ())) 
+	just_say ('packaging ' + str (package))
 	os .makedirs (package), os .rmdir (package), torch .save (goods, package)
 	return package
 def clean_tmp ():
-	bash ('rm "' + tmp_prefix + '*" 2>/dev/null')
-atexit .register (clean_tmp)
+	if hasattr (tmp, 'prefix'):
+		bash ('find "' + tmp_dir + '" | grep "$(basename "' + tmp .prefix + '")" | xargs -I {} rm {}')
+on_killed (clean_tmp)
 
 def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
 	max_jobs = if_none (10 * parallelism, max_jobs)
@@ -65,7 +79,7 @@ def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
 		pids = psutil .Process () .children (recursive = True)
 		for pid in pids:
 			os .kill (pid .pid, signal)
-	atexit .register (clean_pool)
+	on_killed (clean_pool)
 		
 	def running_jobs ():
 		return sum ([ len ([ job for job in jobs .values () if job is None ]) for jobs in it .jobs ])
@@ -84,13 +98,15 @@ def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
 			pids = psutil .Process () .children (recursive = True)
 			for pid in pids:
 				os .kill (pid .pid, signal)
+			if hasattr (tmp, 'prefix'):
+				bash ('find "' + tmp_dir + '" | grep "$(basename "' + tmp .prefix + '-")" | grep -v "rcv" | xargs -I {} rm {}')
 			for i in range (parallelism):
 				send = it .send [i]
 				if i in it .send_fds:
 					it .send_fds [i] .close ()
 				it .send_fds = {}
 				it .send_fps = {}
-				os .remove (send), os .mkfifo (send)
+				os .mkfifo (send)
 				bash (command + ' <"' + send + '" >>"' + rcv + '" &')
 		else:
 			panic ('jay doesnt care yet')
@@ -114,6 +130,7 @@ def pool (command, parallelism, max_jobs = None, log_file = '/dev/null'):
 		it .send_fds [n] .flush ()
 		
 		if running_jobs () > max_jobs:
+			just_say ('pausing pool, # of jobs = ' + str (running_jobs) + ', > max_jobs = ' + str (max_jobs))
 			for _ in get_work ():
 				if running_jobs () > max_jobs:
 					continue
@@ -224,5 +241,26 @@ class yield_:
 		self .gen = gen
 	def __iter__ (self):
 		self .value = yield from self .gen
+class co_ ():
+	def __init__ (self, gen):
+		self .gen = gen
+		self .sending = False
+	def __enter__ (self):
+		def get ():
+			if self .sending:
+				self .sending = False
+				return self .gen .send (self .val)
+			else:
+				return next (self .gen)
+		def iterator ():
+			try:
+				while self .gen: yield get ()
+			except StopIteration: pass
+		def put (x):
+			self .sending = True
+			self .val = x
+		return iterator (), put
+	def __exit__ (self, x, y, z):
+		self .gen .close ()
 def panic (reason):
 	raise Exception (reason)

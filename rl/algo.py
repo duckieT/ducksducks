@@ -27,11 +27,9 @@ def params ():
 		return (
 		{ 'algo': 
 			{ 'algo': 'ga'
-			, 'origination': ('random', population_arg, mutation_sd_arg)
 			, 'culture': ('reward',)
 			, 'discrimination': ('overproportion', elite_proportion_arg, elite_overselection_arg, elite_trials)
-			, 'reproduction': ('mutation-only', mutation_sd_arg, population_arg)
-			, 'batch_size': batch_size } })
+			, 'reproduction': ('mutation-only', mutation_sd_arg, population_arg) } })
 	else:
 		raise Exception ('unknown algo', args .algo)
 

@@ -154,7 +154,3 @@ class conv_ltd (nn .Module):
 def output_size (model, input_size):
 	x = torch .randn (input_size) .unsqueeze (0)
 	return model (x) .size () [1:]
-
-def parameter_sensitivities (module):
-	# TODO: replace with actual sensitivity
-	return { layer: torch .ones (parameter .size ()) for layer, parameter in module .named_parameters () }

@@ -50,18 +50,19 @@ def ga_algo (culture, discrimination, reproduction, ** kwargs):
 		, 'reproduction': reproduction })
 
 	def evolve (habitat):
-		generation = yield 'generation', population_size
+		generation = yield 'generation', ()
 
-		generation = naive_reproduction (mutation_sd, population_size) (generation)
+		generation = generation_from (naive_reproduction (mutation_sd, population_size) (generation))
 		generation = hedonistic_culture (habitat) (generation)
-		generation = fixed_selection (elite_proportion * elite_overselection * population_size) (generation)
+		survivors = fixed_selection (elite_proportion * elite_overselection * population_size) (generation)
 
-		generation = yield 'pre-elites', generation
+		generation = yield 'pre-elites', (survivors, population_size)
 
 		generation = hedonistic_culture (habitat, trials = elite_trials) (generation)
-		generation = fixed_selection (elite_proportion * population_size) (population)
+		survivors = fixed_selection (elite_proportion * population_size) (generation)
 
-		generation = yield 'elites', generation
+		# TODO: what if this is a fraction?
+		generation = yield 'elites', (survivors, elite_proportion * elite_overselection * population_size)
 	ga .evolve = evolve
 	return ga
 
@@ -82,6 +83,7 @@ def hedonistic_culture (habitat, trials = 1):
 	def culture (generation):
 		def conception (individual):
 			lives = ( desiderata (habitat .incarnate (individual)) for i in range (trials) )
+			# just_say ('issued one individual')
 			def conception ():
 				yield from iter (())
 				individual .fitness = sum ( desiderata (life) for life in lives ) / trials
@@ -94,14 +96,18 @@ def fixed_selection (elites_size):
 	import math
 	elites_size = math .ceil (elites_size)
 	def elites (generation):
-		elites = []
-		for individual in ( desiderata (character) for character in generation ):
+		selection = thing ()
+		selection .elites = []
+		def elites_with (character):
+			yield from iter (())
+			individual = desiderata (character)
 			just_say ('received one survivor')
-			individual_index = rank (elites, individual)
+			individual_index = rank (selection .elites, individual)
 			if individual_index < elites_size:
 				just_say ('accepted one elite')
-				elites = elites [:individual_index] + [ individual ] + elites [individual_index:]
-			yield iter (elites)
+				selection .elites = selection .elites [:individual_index] + [ individual ] + selection .elites [individual_index:]
+			return selection .elites
+		yield from ( elites_with (character) for character in generation )
 	return elites
 
 def naive_mutation (mutation_sd):
@@ -123,41 +129,10 @@ def naive_mutation (mutation_sd):
 		return bloodline (mutated_genotype)
 	return mutate
 
-def live (env, moralize = duckie_morals):
-	def live (individual):
-		life = individual .reincarnate ()
-		value = None
 
-		alive = True
-		perception = env .reset ()
-		while alive:
-			observation = torch .from_numpy (perception) .to (dtype = torch.float32) .permute (2, 0, 1)
-			action = life .choose (observation)
-			try:
-				perception, reward, dead, info = env .step (action)
-
-				life .killed = (reward != 0)
-				life .crashed = False
-			except AssertionError:
-				print ('unluck!', file = sys .stderr) 
-				yield 'crash reset', None
-
-				value = yield from live (env, moralize) (individual)
-				return value
-			except:
-				import traceback
-				print ('crashed!', file = sys .stderr) 
-				print (perception, reward, dead, info, file = sys .stderr) 
-				print (traceback .format_exc (), file = sys .stderr) 
-
-				life .killed = True
-				life .crashed = True
-			yield 'step', (perception, reward, dead, info)
-			value = moralize (env, life, action, perception, reward, dead, info) (value)
-			alive = not dead
-			
-		return value
-	return live
+def parameter_sensitivities (module):
+	# TODO: replace with actual sensitivity
+	return { layer: torch .ones (parameter .size ()) for layer, parameter in module .named_parameters () }
 
 def duckie_morals (env, life, action, perception, reward, dead, info):
 	if not hasattr (env, 'pos_history'):
@@ -189,6 +164,46 @@ def duckie_morals (env, life, action, perception, reward, dead, info):
 		else: return value + reward
 	return value
 
+def live (env, moralize = duckie_morals):
+	def live (individual):
+		life = individual .reincarnate ()
+		value = None
+
+		alive = True
+		perception = env .reset ()
+		while alive:
+			observation = torch .from_numpy (perception) .to (dtype = torch.float32) .permute (2, 0, 1)
+			action = life .choose (observation)
+			try:
+				perception, reward, dead, info = env .step (action)
+
+				life .killed = (reward != 0)
+				life .crashed = False
+			except AssertionError:
+				import sys
+
+				print ('unluck!', file = sys .stderr) 
+				yield 'crash reset', None
+
+				value = yield from live (individual)
+				return value
+			except:
+				import sys
+				import traceback
+
+				print ('crashed!', file = sys .stderr) 
+				print (perception, reward, dead, info, file = sys .stderr) 
+				print (traceback .format_exc (), file = sys .stderr) 
+
+				life .killed = True
+				life .crashed = True
+			yield 'step', (perception, reward, dead, info)
+			value = moralize (env, life, action, perception, reward, dead, info) (value)
+			alive = not dead
+			
+		return value
+	return live
+
 def rank (elites, individual):
 	if len (elites) == 0:
 		return 0
@@ -209,18 +224,18 @@ def desiderata (generator):
 	for _ in x: pass
 	return x .value
 
-def original (agent):
-	agent = agent .cpu ()
-	shared_genes = [ layer for layer, _ in agent .named_parameters () if 'shared_' in layer ]
+def original (genotype):
+	genotype = genotype .cpu ()
+	shared_genes = [ layer for layer, _ in genotype .named_parameters () if 'shared_' in layer ]
 	blueprint = genotype .state_dict ()
 	parameters_origin = { layer: torch .zeros (parameter .size ()) for layer, parameter in blueprint .items () if not layer in shared_genes }
 	blueprint .update (parameters_origin)
-	agent .load_state_dict (blueprint)
-	return agent
+	genotype .load_state_dict (blueprint)
+	return genotype
 
 def character_from (individual):
 	yield iter (())
-	return individual)
+	return individual
 def generation_from (population):
 	return ( character_from (individual) for individual in population )
 
@@ -234,6 +249,7 @@ def bloodline (genotype):
 		def choose (observation):
 			with torch .no_grad ():
 				# life .instinct .sense (observation .to (device))
+				life .instinct .sense (observation)
 				return tuple (life .instinct (life .instinct .recognition ()) .numpy ())
 		life .instinct = copy .deepcopy (genotype)
 		shared_genes = [ layer for layer, _ in genotype .named_parameters () if 'shared_' in layer ]

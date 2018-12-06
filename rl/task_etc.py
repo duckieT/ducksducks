@@ -15,8 +15,8 @@ max_steps = 300
 iteration_offset = 0
 iterations = 1000
 parallelism = 2
+batch_size = 100
 log_interval = 10
-batch_size = 50
 
 def load_task (params):
 	task_params = params ['task']
@@ -103,53 +103,55 @@ def evolve_task (map_name, frame_skip, distortion, max_steps, out_path, parallel
 			task .iteration_offset = iteration
 
 			# TODO: move models to cuda per batch only
-			evolution = task .algo .evolve (habitat)
-			for stage, progress in evolution:
-				if stage == 'generation':
-					print ('--------------------------------------------------------------------------------')
-					print ('Generation: {}' .format (iteration + 1))
-					print ('--------------------------------------------------------------------------------')
-					population_size = progress
-					evolution .send (generation_from (survivors))
-				elif stage == 'pre-elites':
-					pre_elites_generation = progress
-					population_size = pre_elites_generation .reproduction_size
-					elite_size = pre_elites_generation .discrimination_size
+			with co_ (task .algo .evolve (habitat)) as (evolution, send):
+				for stage, progress in evolution:
+					if stage == 'generation':
+						print ('--------------------------------------------------------------------------------')
+						print ('Generation: {}' .format (iteration + 1))
+						print ('--------------------------------------------------------------------------------')
+						send (generation_from (survivors))
+					elif stage == 'pre-elites':
+						pre_elites_survivors, population_size = progress
 
-					survivors = []
-					i = 0
-					for batch in batches (pre_elites_generation, batch_size):
-						batch = [ desiderata (character) for character in batch ]
-						i += len (batch)
-						survivors = batch
-						print ('Generation: {} Pre-elites [{}/{} ({:.0f}%)]\tMin: {:.6f}\tMedian: {:.6f}\tMax: {:.6f}\tAverage: {:.6f}' .format (iteration + 1, i, population_size, 100. * i / population_size, survivors [-1] .fitness, survivors [len (survivors) // 2] .fitness, survivors [0] .fitness, sum ([ individual .fitness for individual in survivors ]) / len (survivors)))
-					evolution .send (generation_from (survivors))
-				elif stage == 'elites':
-					elites_generation = progress
-					population_size = elites_generation .reproduction_size
-					elite_size = elites_generation .discrimination_size
+						survivors = []
+						i = 0
+						# TODO: whatif log_interval > batch_size?
+						for batch in chunks (pre_elites_survivors, batch_size):
+							batch = list (batch)
+							for subbatch in chunks (iter (batch), log_interval):
+								subbatch = list (subbatch)
+								* _, new_survivors = [ desiderata (character) for character in subbatch ]
+								i += len (subbatch)
+								survivors = new_survivors
+								print ('Generation: {} Pre-elites [{}/{} ({:.0f}%)]\tMin: {:.6f}\tMedian: {:.6f}\tMax: {:.6f}\tAverage: {:.6f}' .format (iteration + 1, i, population_size, 100. * i / population_size, survivors [-1] .fitness, survivors [len (survivors) // 2] .fitness, survivors [0] .fitness, sum ([ individual .fitness for individual in survivors ]) / len (survivors)))
+						send (generation_from (survivors))
+					elif stage == 'elites':
+						elites_survivors, population_size = progress
 
-					survivors = []
-					i = 0
-					for batch in batches (elites_generation, batch_size):
-						batch = [ desiderata (character) for character in batch ]
-						i += len (batch)
-						survivors = batch
-						print ('Generation: {} Elites [{}/{} ({:.0f}%)]\tMin: {:.6f}\tMedian: {:.6f}\tMax: {:.6f}\tAverage: {:.6f}' .format (iteration + 1, i, population_size, 100. * i / population_size, elites [-1] .fitness, elites [len (elites) // 2] .fitness, elites [0] .fitness, sum ([ individual .fitness for individual in elites ]) / len (elites)))
-					evolution .send (generation_from (survivors))
+						survivors = []
+						i = 0
+						for batch in chunks (elites_survivors, batch_size):
+							batch = list (batch)
+							for subbatch in chunks (iter (batch), log_interval):
+								subbatch = list (subbatch)
+								* _, new_survivors = [ desiderata (character) for character in subbatch ]
+								i += len (subbatch)
+								survivors = new_survivors
+								print ('Generation: {} Elites [{}/{} ({:.0f}%)]\tMin: {:.6f}\tMedian: {:.6f}\tMax: {:.6f}\tAverage: {:.6f}' .format (iteration + 1, i, population_size, 100. * i / population_size, elites [-1] .fitness, elites [len (elites) // 2] .fitness, elites [0] .fitness, sum ([ individual .fitness for individual in elites ]) / len (elites)))
+						send (generation_from (survivors))
 
 			torch .save (save_task (task), file ('task_' + str (iteration + 1) + '.pt'))
 			torch .save (save_population (survivors), file ('elites_' + str (iteration + 1) + '.pt'))
 
-			desiderata (sample_visualization (elites [0], habitat, file ('sample_champion_' + str (iteration + 1) + '.mp4')))
-			desiderata (sample_visualization (elites [1], habitat, file ('sample_first-runner_' + str (iteration + 1) + '.mp4')))
-			desiderata (sample_visualization (elites [2], habitat, file ('sample_second-runner_' + str (iteration + 1) + '.mp4')))
+			desiderata (sample_visualization (survivors [0], habitat, file ('sample_champion_' + str (iteration + 1) + '.mp4')))
+			desiderata (sample_visualization (survivors [1], habitat, file ('sample_first-runner_' + str (iteration + 1) + '.mp4')))
+			desiderata (sample_visualization (survivors [2], habitat, file ('sample_second-runner_' + str (iteration + 1) + '.mp4')))
 	task .go = go_evolve
 
 	def file (filename):
 		import os
 		return os .path .join (out_path, filename)
-	def batches (generation, batch_size):
+	def chunks (generation, batch_size):
 		import itertools
 		iterator = iter (generation)
 		for first in iterator:
@@ -186,7 +188,7 @@ def sample_task (map_name, frame_skip, distortion, max_steps, cuda_ok, log_file,
 
 					genotype = load_agent ({ ** agent_params, ** (task .model_params or {}) })
 					individual = bloodline (genotype)
-					incarnation = yield_ (
+					incarnation = (
 						habitat .incarnate (individual) if command == 'agent' else
 						habitat .incarnate (individual, record = rest [1]) if command == 'agent-recorded' else
 						panic ('explode') )
@@ -227,22 +229,23 @@ def visualize_task (map_name, frame_skip, distortion, max_steps, population, out
 		device = torch .device ('cuda') if cuda_ok else torch .device ('cpu')
 
 		population = task .population
-		population = demos (
+		survivors = (
 			# [ individual .to (device) for individual in population ] if not population is None else
-			population 
-			) .reshape (batch_size)
+			population if not population is None else
+			[ bloodline (original (adam)) ])
 
 		pool_log_file = os .path .join (out_path, 'pool.log')
 		sample_log_file = os .path .join (out_path, 'sample.log')
 		habitat = parallel_habitat (* 
 			[ map_name, parallelism ]
+			, batch_size = batch_size
 			, frame_skip = frame_skip, distortion = distortion, max_steps = max_steps
 			, pool_log_file = pool_log_file, sample_log_file = sample_log_file )
 		iteration = iteration_offset
 
-		desiderata (sample_visualization (elites [0], habitat, file ('sample_champion_' + str (iteration + 1) + '.mp4')))
-		desiderata (sample_visualization (elites [1], habitat, file ('sample_first-runner_' + str (iteration + 1) + '.mp4')))
-		desiderata (sample_visualization (elites [2], habitat, file ('sample_second-runner_' + str (iteration + 1) + '.mp4')))
+		desiderata (sample_visualization (survivors [0], habitat, file ('sample_champion_' + str (iteration + 1) + '.mp4')))
+		desiderata (sample_visualization (survivors [1], habitat, file ('sample_first-runner_' + str (iteration + 1) + '.mp4')))
+		desiderata (sample_visualization (survivors [2], habitat, file ('sample_second-runner_' + str (iteration + 1) + '.mp4')))
 	task .go = go_visualize
 
 	def file (filename):
@@ -298,14 +301,13 @@ def parallel_habitat (map_name, parallelism, frame_skip = None, distortion = Non
 
 	def incarnate (individual, record = None):
 		if habitat .jobs % batch_size == 0:
-			habitat .pool .reset ()
-			habitat .jobs_offset = habitat .jobs
-			habitat .pool .broadcast_work ('just', 'shared', package (shared = save_shared_genes (individual .genotype)))
+			if habitat .jobs != 0: habitat .pool .reset ()
+			habitat .pool .broadcast_work ('just', 'shared', package (shared = save_agent_shared (individual .genotype)))
 		job = next_job ()
 		if not record:
-			habitat .pool .put_work (job, 'agent', package (agent = save_agent_only (individual .genotype)))
+			habitat .pool .put_work (job, 'agent', package (agent = save_agent_distinct (individual .genotype)))
 		else:
-			habitat .pool .put_work (job, 'agent-recorded', package (agent = save_agent_only (individual .genotype)), record)
+			habitat .pool .put_work (job, 'agent-recorded', package (agent = save_agent_distinct (individual .genotype)), record)
 		yield 'moment', 'incarnating'
 		return collect (job)
 	habitat .incarnate = incarnate
@@ -323,7 +325,6 @@ def parallel_habitat (map_name, parallelism, frame_skip = None, distortion = Non
 		else:
 			panic ('something is gravely ill')
 	habitat .jobs = 0
-	habitat .jobs_offset = 0
 	habitat .pool = pool (* 
 		[ './go <(./task --task sample' \
 			+ (' --log-file ' + sample_log_file if sample_log_file else '') \
