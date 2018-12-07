@@ -1,3 +1,4 @@
+import math
 import random
 import torch
 import itertools
@@ -13,7 +14,7 @@ algo = 'ga'
 elite_proportion = 0.05
 elite_overselection = 2
 elite_trials = 4
-mutation_sd = 10
+mutation_scale = 3
 population_size = 300
 	
 def load_algo (params):
@@ -38,7 +39,7 @@ def ga_algo (culture, discrimination, reproduction, ** kwargs):
 		(discrimination [1], 1, 1) if discrimination [0] == 'proportion' else
 		discrimination [1:] if discrimination [0] == 'overproportion' else
 		panic ('unrecognized discrimination kind: ' + str (discrimination [0])) )
-	mutation_sd, population_size = (
+	mutation_scale, population_size = (
 		reproduction [1:] if reproduction [0] == 'mutation-only' else
 		panic ('unrecognized reproduction kind: ' + str (reproduction [0])) )
 
@@ -52,7 +53,7 @@ def ga_algo (culture, discrimination, reproduction, ** kwargs):
 	def evolve (habitat):
 		generation = yield 'generation', ()
 
-		generation = generation_from (naive_reproduction (mutation_sd, population_size) (generation))
+		generation = generation_from (sd_reproduction (mutation_scale, population_size) (generation))
 		generation = hedonistic_culture (habitat) (generation)
 		survivors = fixed_selection (elite_proportion * elite_overselection * population_size) (generation)
 
@@ -61,15 +62,26 @@ def ga_algo (culture, discrimination, reproduction, ** kwargs):
 		generation = hedonistic_culture (habitat, trials = elite_trials) (generation)
 		survivors = fixed_selection (elite_proportion * population_size) (generation)
 
-		# TODO: what if this is a fraction?
-		generation = yield 'elites', (survivors, elite_proportion * elite_overselection * population_size)
+		generation = yield 'elites', (survivors, math .ceil (elite_proportion * elite_overselection * population_size))
 	ga .evolve = evolve
 	return ga
 
-def naive_reproduction (mutation_sd, population_size):
-	mutate = naive_mutation (mutation_sd) 
+def naive_reproduction (mutation_scale, population_size):
+	mutate = naive_mutation (blind_sensitivities (mutation_scale)) 
 	def next_gen (generation):
 		parents = [ desiderata (character) for character in generation ]
+
+		children_room = population_size - len (parents)
+		children = ( mutate (parents [i]) for i in random .choices (range (len (parents)), k = children_room) )
+
+		yield from iter (parents)
+		yield from children
+	return next_gen
+
+def sd_reproduction (mutation_scale, population_size):
+	def next_gen (generation):
+		parents = [ desiderata (character) for character in generation ]
+		mutate = naive_mutation (sd_sensitivities (parents, mutation_scale)) 
 
 		children_room = population_size - len (parents)
 		children = ( mutate (parents [i]) for i in random .choices (range (len (parents)), k = children_room) )
@@ -87,13 +99,15 @@ def hedonistic_culture (habitat, trials = 1):
 			def conception ():
 				yield from iter (())
 				individual .fitness = sum ( desiderata (life) for life in lives ) / trials
+				individual .trials = (
+					trials if not individual .trials else
+					individual .trials + trials )
 				return individual
 			return conception ()
 		yield from ( conception (desiderata (character)) for character in generation )
 	return culture
 
 def fixed_selection (elites_size):
-	import math
 	elites_size = math .ceil (elites_size)
 	def elites (generation):
 		selection = thing ()
@@ -110,7 +124,7 @@ def fixed_selection (elites_size):
 		yield from ( elites_with (character) for character in generation )
 	return elites
 
-def naive_mutation (mutation_sd):
+def naive_mutation (parameter_sensitivities):
 	def mutate (individual):
 		import copy
 
@@ -120,7 +134,7 @@ def naive_mutation (mutation_sd):
 		distinct_genes = { layer: parameter for layer, parameter in blueprint .items () if not layer in shared_genes }
 		gene_sensitivities = parameter_sensitivities (genotype)
 		mutated_distinct_genes = (
-			{ layer: (chromosome + torch .normal (torch .zeros (chromosome .size ()), mutation_sd) * gene_sensitivities [layer]) .to (chromosome .device)
+			{ layer: (chromosome + torch .normal (gene_sensitivities [layer])) .to (chromosome .device)
 				for layer, chromosome in distinct_genes .items () })
 		blueprint .update (mutated_distinct_genes)
 		mutated_genotype = copy .deepcopy (genotype)
@@ -129,10 +143,24 @@ def naive_mutation (mutation_sd):
 		return bloodline (mutated_genotype)
 	return mutate
 
-
-def parameter_sensitivities (module):
-	# TODO: replace with actual sensitivity
-	return { layer: torch .ones (parameter .size ()) for layer, parameter in module .named_parameters () }
+def blind_sensitivities (scale):
+	def sensitivities (module):
+		return { layer: scale * torch .ones (parameter .size ()) for layer, parameter in module .named_parameters () }
+	return sensitivities
+def sd_sensitivities (population, scale, epsilon = 0.01):
+	if len (population) == 1:
+		return blind_sensitivities (scale)
+	else:
+		typical_genome = next (iter (population)) .genotype
+		gene_pool = [ individual .genotype .state_dict () for individual in population ]
+		sensitivity = (
+		{ layer: torch .clamp (torch .std (torch .stack (
+			[ genome [layer] for genome in gene_pool ])
+			, dim = 0), min = epsilon) * scale
+			for layer, _ in typical_genome .named_parameters () } )
+		def sensitivities (module):
+			return sensitivity
+		return sensitivities
 
 def duckie_morals (env, life, action, perception, reward, dead, info):
 	if not hasattr (env, 'pos_history'):
@@ -149,15 +177,17 @@ def duckie_morals (env, life, action, perception, reward, dead, info):
 	cur_pos = tuple (env .cur_pos)
 	x, y, z = cur_pos
 	idle_steps = len ([ i for i, (x_, y_, z_) in enumerate (env .pos_history)
-		if (x - x_) ** 2 + (y - y_) ** 2 + (z - z_) ** 2 < (step_size * (i + 1) * 0.8) ** 2 ])
+		if (x - x_) ** 2 + (y - y_) ** 2 + (z - z_) ** 2 < (0.8 * step_size * (i + 1) ** 0.9) ** 2 ])
 	idle_penalty = - 0.02 * ( idle_steps ** 2 )
+
+	killed_penalty = ( - 100000000 if life .killed else 0 )
 
 	if not dead:
 		env .pos_history = [ cur_pos ] + env .pos_history
 	else:
 		env .pos_history = []
 
-	reward = position_reward + velocity_reward + rotation_penalty + idle_penalty 
+	reward = rotation_penalty + velocity_reward + position_reward + idle_penalty + killed_penalty
 
 	def value (value):
 		if value is None: return reward
@@ -177,7 +207,7 @@ def live (env, moralize = duckie_morals):
 			try:
 				perception, reward, dead, info = env .step (action)
 
-				life .killed = (reward != 0)
+				life .killed = dead and (reward != 0)
 				life .crashed = False
 			except AssertionError:
 				import sys

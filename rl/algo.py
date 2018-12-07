@@ -12,7 +12,7 @@ def params ():
 	parser .add_argument ('--elite-proportion', type = float, metavar = 'p', help = 'proportion of population designated as elite (default: ' + str (elite_proportion) + ')')
 	parser .add_argument ('--elite-overselection', type = float, metavar = 'p', help = 'number of tentative elites for every elite (default: ' + str (elite_overselection) + ')')
 	parser .add_argument ('--elite-trials', type = int, metavar = 'n', help = 'number of extra trials for every elite (default: ' + str (elite_trials) + ')')
-	parser .add_argument ('--mutation-sd', type = float, metavar = 'mu', help = 'standard deviation of noise for mutation (default: ' + str (mutation_sd) + ')')
+	parser .add_argument ('--mutation-scale', type = float, metavar = 'mu', help = 'standard deviation of noise for mutation (default: ' + str (mutation_scale) + ')')
 
 	args = parser .parse_args ()
 
@@ -23,13 +23,13 @@ def params ():
 		elite_proportion_arg = if_none (elite_proportion, args .elite_proportion)
 		elite_overselection_arg = if_none (elite_overselection, args .elite_overselection)
 		elite_trials_arg = if_none (elite_trials, args .elite_trials)
-		mutation_sd_arg = if_none (mutation_sd, args .mutation_sd)
+		mutation_scale_arg = if_none (mutation_scale, args .mutation_scale)
 		return (
 		{ 'algo': 
 			{ 'algo': 'ga'
 			, 'culture': ('reward',)
 			, 'discrimination': ('overproportion', elite_proportion_arg, elite_overselection_arg, elite_trials)
-			, 'reproduction': ('mutation-only', mutation_sd_arg, population_arg) } })
+			, 'reproduction': ('mutation-only', mutation_scale_arg, population_arg) } })
 	else:
 		raise Exception ('unknown algo', args .algo)
 

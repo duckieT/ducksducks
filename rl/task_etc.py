@@ -137,7 +137,7 @@ def evolve_task (map_name, frame_skip, distortion, max_steps, out_path, parallel
 								* _, new_survivors = [ desiderata (character) for character in subbatch ]
 								i += len (subbatch)
 								survivors = new_survivors
-								print ('Generation: {} Elites [{}/{} ({:.0f}%)]\tMin: {:.6f}\tMedian: {:.6f}\tMax: {:.6f}\tAverage: {:.6f}' .format (iteration + 1, i, population_size, 100. * i / population_size, elites [-1] .fitness, elites [len (elites) // 2] .fitness, elites [0] .fitness, sum ([ individual .fitness for individual in elites ]) / len (elites)))
+								print ('Generation: {} Elites [{}/{} ({:.0f}%)]\tMin: {:.6f}\tMedian: {:.6f}\tMax: {:.6f}\tAverage: {:.6f}' .format (iteration + 1, i, population_size, 100. * i / population_size, survivors [-1] .fitness, survivors [len (survivors) // 2] .fitness, survivors [0] .fitness, sum ([ individual .fitness for individual in survivors ]) / len (survivors)))
 						send (generation_from (survivors))
 
 			torch .save (save_task (task), file ('task_' + str (iteration + 1) + '.pt'))
